@@ -1,0 +1,117 @@
+{
+	"output_file": "settings.json",	
+	"RunOnlyWhenLive": {
+		"type": "checkbox",
+		"value": true,
+		"label": "Only Run When Live",
+		"tooltip": "Run the trivia minigame only when you are live.",
+		"group": "General"
+	},
+	"PlayPermission": {
+	        "type": "dropdown",
+	        "value": "Everyone",
+	        "items": ["Everyone","Regular","Subscriber","Moderator","Editor"],
+	        "label": "Permissions to Play",
+	        "tooltip": "Set the permission level for participating in trivia",
+        	"group" : "General"
+    	},
+	"AdminPermission": {
+	        "type": "dropdown",
+	        "value": "Moderator",
+	        "items": ["Everyone","Regular","Subscriber","Moderator","Editor"],
+	        "label": "Permissions to Modify",
+	        "tooltip": "Set the permission level for adding, removing, modifying questions and other tasks",
+        	"group" : "General"
+    	},
+	"QuestionDelayInMinutes": {
+		"type": "numberbox",
+		"value": 10,
+		"label": "Question Delay",
+		"tooltip": "Amount of time in minutes between questions.",
+		"group": "Question Settings"
+	},
+	"QuestionString": {
+	        "type": "textbox",
+	        "value": "Win $points $currency by answering: In $game, $question",
+	        "label": "Question Format",
+	        "tooltip": "How the trivia questions are displayed. Parameters: $index, $points, $currency, $game, $question, $answers",
+        	"group" : "Question Settings"
+    	},
+	"QuestionSuccessResponse": {
+	        "type": "textbox",
+	        "value": "$user has answered correctly and won $points $currency.",
+	        "label": "Successful Answer Format",
+	        "tooltip": "The string displayed on correct answer. Parameters: $index, $points, $currency, $game, $question, $answers, $user",
+        	"group" : "Question Settings"
+    	},
+	"ShowAnswersOnFailure": {
+		"type": "checkbox",
+		"value": false,
+		"label": "Show Answers on Question Expiry",
+		"tooltip": "Show the question's answer(s) when the question expires.",
+		"group": "Question Settings"
+	},
+	"QuestionFailureResponse": {
+	        "type": "textbox",
+	        "value": "Nobody answered the previous question. The answers were $answers.",
+	        "label": "Failure to Answer Format",
+	        "tooltip": "How the trivia answers are displayed on expiry. Parameters: $index, $points, $currency, $game, $question, $answers",
+        	"group" : "Question Settings"
+	},
+	"QuestionsRewardLoyaltyPoints": {
+		"type": "checkbox",
+		"value": true,
+		"label": "Loyalty Point Rewards",
+		"tooltip": "Correct trivia answers reward loyalty points.",
+		"group": "Reward Settings"
+	},
+	"QuestionDefaultPointValue": {
+		"type": "numberbox",
+		"value": 50,
+		"label": "Default Question Values",
+		"tooltip": "The default point value a question will have if none is supplied.",
+		"group": "Reward Settings"
+	},
+	"RewardDecreaseOnAnswer": {
+		"type": "numberbox",
+		"value": 10,
+		"label": "% Point Decrease On Correct Answer",
+		"tooltip": "Future currency reward amount will decrease by this percentage when somebody correctly answers a question. Lowers the value of easy questions.",
+		"group": "Reward Settings"
+	},
+	"RewardIncreaseOnNoAnswer": {
+		"type": "numberbox",
+		"value": 10,
+		"label": "% Point Increase On Unanswered",
+		"tooltip": "Future currency reward amount will increase by this percentage when nobody correctly answers a question. Increases the value of hard questions.",
+		"group": "Reward Settings"
+	},
+	"EnableChatConfirmations": {
+		"type": "checkbox",
+		"value": false,
+		"label": "Enable Chat Confirmations",
+		"tooltip": "Enable or disable chat messages that confirm successful command usages.",
+		"group": "Response Settings"
+	},
+	"EnableChatSyntaxHints": {
+		"type": "checkbox",
+		"value": false,
+		"label": "Enable Syntax Hints",
+		"tooltip": "Enable or disable syntax hints for when somebody uses a command improperly (Missing arguments, etc.).",
+		"group": "Response Settings"
+	},
+	"EnableChatErrors": {
+		"type": "checkbox",
+		"value": false,
+		"label": "Enable Chat Errors",
+		"tooltip": "Enable or disable chat messages for command errors (Not A Number, Insufficient Permissions, etc.).",
+		"group": "Response Settings"
+	},
+	"EnableDebug": {
+		"type": "checkbox",
+		"value": false,
+		"label": "Enable Debug",
+		"tooltip": "Enable or disable debug logs.",
+		"group": "Response Settings"
+	}
+}
