@@ -127,3 +127,9 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+trivialog.txt
+settings.json
+settings.js
+questions.json
+questions - Copy.json
+currentquestion.txt
