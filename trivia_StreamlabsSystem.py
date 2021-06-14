@@ -203,6 +203,7 @@ def Execute(data):
             subcommand = data.GetParam(1)
             if subcommand == "stop":
                 active = False
+                UpdateCurrentQuestionFile("")
                 Log("Trivia Stop: Minigame Stopped with Command", DebugLevel.Debug)
                 if script_settings.enable_chat_command_confirmations: 
                     Post("Trivia Minigame Stopped.")
@@ -223,6 +224,7 @@ def Execute(data):
 
             elif subcommand == "load":
                 if data.GetParamCount() == 2 and len(questions_list) > 0:
+                    Log("!Trivia Load: Called.", DebugLevel.Debug)
                     NextQuestion()
                     #No confirmation necessary - if a question is loaded successfully the result will be obvious
                 elif data.GetParamCount() == 3:
@@ -230,6 +232,7 @@ def Execute(data):
                         question_index = int(data.GetParam(2)) - 1
                         if question_index < 0 or question_index > len(questions_list) - 1:
                             raise IndexError("Question index out of bounds.")
+                        Log("!Trivia Load: Called with supplied index.", DebugLevel.Debug)
                         NextQuestion(question_index)
                     except (ValueError, IndexError) as e:
                         Log("Trivia Load: Question could not be loaded: " + str(e), DebugLevel.Warn)
@@ -371,10 +374,13 @@ def Execute(data):
             Log(data.UserName + " attempted to use trivia admin commands without permission. " + str(data.Message), DebugLevel.Info)
             Post(data.UserName + ", you do not have the permissions to use this command.")
         if Parent.HasPermission(data.User, script_settings.permissions_players, ""):
-            if str(data.Message).startswith("!trivia"):
+            if str(data.Message) == "!trivia":
                 if current_question_index == -1:
                     if (not script_settings.automatically_run_next_question) and ready_for_next_question:
+                        Log("!Trivia: Called to start new question.", DebugLevel.Debug)
+                        global next_question_file_update_time
                         NextQuestion()
+                        next_question_file_update_time = time.time()
                     else:
                         global question_start_time
                         Log("Trivia: There is no trivia question active.", DebugLevel.Info)
@@ -387,28 +393,50 @@ def Execute(data):
 #Function that runs continuously
 def Tick():
     global question_start_time
+    global question_expiry_time
     global next_question_file_update_time
     global active
     if active and (not script_settings.run_only_when_live or (script_settings.run_only_when_live and Parent.IsLive())):
         # If time has expired, check to see if there is a current question
         # If there is a current question, depending on settings the answers may need to be displayed and the points adjusted
         current_time = time.time()
+
         if not current_question_index == -1:
+            #There is a current question
             if current_time > question_expiry_time:
+                #The question has expired. End the question.
                 global current_question_index
                 Log("Tick: Question time exceeded. Ending question.", DebugLevel.Debug)
-                EndQuestion()     
+                EndQuestion()
+            elif script_settings.create_current_question_file and (current_time > next_question_file_update_time):
+                #The question has not expired. Display the question and the remaining time.
+                if script_settings.enable_arena_mode:
+                    UpdateCurrentQuestionFile(ParseString(str(datetime.fromtimestamp(question_expiry_time - time.time()).strftime('%M:%S')) + ") In $game, $question"), 1)
+                else:
+                    UpdateCurrentQuestionFile(ParseString(str(datetime.fromtimestamp(question_expiry_time - time.time()).strftime('%M:%S')) + ") In $game, $question"), 1)
+            
         else:
+            #There is no current question
             if current_time > question_start_time:
+                #It is time for the next question.
                 if script_settings.automatically_run_next_question:
+                    #If the settings indicate to run the next question, do so.
+                    Log("Tick: Starting next question.", DebugLevel.Debug)
                     NextQuestion()
                 else:
+                    #If the settings indicate to NOT run the next question, set the boolean and display that the next question is ready.
                     global ready_for_next_question
                     ready_for_next_question = True
+                    if script_settings.create_current_question_file and (current_time > next_question_file_update_time):
+                        UpdateCurrentQuestionFile("Next question ready. Type !trivia to begin!", time.time() + 86400)
+            elif script_settings.create_current_question_file and (current_time > next_question_file_update_time):
+                #It is not time for the next question. Display the remaining time until the next question.
+                UpdateCurrentQuestionFile("Time until next question: " + str(datetime.fromtimestamp(question_start_time - time.time()).strftime('%M:%S')) + ".", 1)
+
         #Log("Current time: " + str(current_time) + ". Update time: " + str(next_question_file_update_time))
-        if current_time > next_question_file_update_time:
+        #if current_time > next_question_file_update_time:
             #Log("Tick: Updating Question File. Current time: " + str(current_time) + " vs " + str(next_question_file_update_time), DebugLevel.Debug)
-            UpdateCurrentQuestionFile()
+            #UpdateCurrentQuestionFile()
     return
 
 def CheckForMatch(data):
@@ -472,16 +500,14 @@ def EndQuestion():
             if script_settings.enable_arena_mode:
                 if script_settings.create_current_question_file:
                     global next_question_file_update_time
-                    UpdateCurrentQuestionFile(ParseString(string = script_settings.arena_question_reward_string, points = points_being_rewarded, users = correct_usernames))
-                    next_question_file_update_time = time.time() + 10
+                    UpdateCurrentQuestionFile(ParseString(string = script_settings.arena_question_reward_string, points = points_being_rewarded, users = correct_usernames), 10)
                 else:
                     Post(ParseString(string = script_settings.arena_question_reward_string, points = points_being_rewarded, users = correct_usernames))
             else:
                 if script_settings.create_current_question_file:
                     global next_question_file_update_time
                     global question_start_time
-                    UpdateCurrentQuestionFile(ParseString(string = script_settings.standard_question_reward_string, points = points_being_rewarded, users = correct_usernames))
-                    next_question_file_update_time = time.time() + 10
+                    UpdateCurrentQuestionFile(ParseString(string = script_settings.standard_question_reward_string, points = points_being_rewarded, users = correct_usernames), 10)
                 else:
                     Post(ParseString(string = script_settings.standard_question_reward_string, points = points_being_rewarded, users = correct_usernames))
         else:
@@ -491,8 +517,7 @@ def EndQuestion():
                 if script_settings.create_current_question_file:
                     global next_question_file_update_time
                     global question_start_time
-                    UpdateCurrentQuestionFile(ParseString(string = script_settings.no_winners_response_string))
-                    next_question_file_update_time = time.time() + 10
+                    UpdateCurrentQuestionFile(ParseString(string = script_settings.no_winners_response_string), 10)
                 else:
                     Post(ParseString(string = script_settings.no_winners_response_string))
             if int(script_settings.percent_loyalty_point_value_increase_on_unanswered) > 0:
@@ -529,6 +554,7 @@ def NextQuestion(question_index = -1):
         current_question_index = question_index
     Log("NextQuestion: Loaded question at Index " + str(current_question_index + 1) + ".", DebugLevel.Debug)
     if not script_settings.create_current_question_file:
+        Log("Script is creating current question file? " + str(script_settings.create_current_question_file))
         if script_settings.enable_arena_mode:
             Post(ParseString("Multiple users can win $points $currency by answering: $index) In $game, $question"))
         else:
@@ -536,7 +562,6 @@ def NextQuestion(question_index = -1):
     question_expiry_time = time.time() + ((script_settings.duration_of_questions) * 60)
     Log("NextQuestion: Next Question at " + datetime.fromtimestamp(question_expiry_time).strftime('%H:%M:%S') + ".", DebugLevel.Debug)
     ready_for_next_question = False
-    UpdateCurrentQuestionFile()
 
 def GetAttribute(attribute, message):
     Log("GetAttribute: Called with message \"" + message + "\" looking for attribute \"" + attribute + "\".", DebugLevel.Debug)
@@ -574,7 +599,7 @@ def ParseString(string, points = -1, users = []):
     string = string.replace("$game", questions_list[current_question_index].get_game())
     string = string.replace("$users", ",".join(users))
     string = string.replace("$time", str(script_settings.duration_of_questions))
-    Log("ParseString: Result of string parsing: \"" + string + "\"", DebugLevel.Debug)
+    #Log("ParseString: Result of string parsing: \"" + string + "\"", DebugLevel.Debug)
     return string
 
 def SaveTrivia():
@@ -621,10 +646,26 @@ def ReloadSettings(jsonData):
     # Execute json reloading here
     Log("ReloadSettings: Saving settings.", DebugLevel.Debug)
     global script_settings
+    global current_question_index
+    previous_duration_of_questions = script_settings.duration_of_questions
+    previous_duration_between_questions = script_settings.duration_between_questions
     script_settings.__dict__ = json.loads(jsonData)
     script_settings.Save(settings_file)
     Log("ReloadSettings: Settings saved and applied successfully", DebugLevel.Debug)
-    return
+
+    #If the user disabled the usage of the script file, empty the file so the on screen display goes away
+    if not script_settings.create_current_question_file:
+        UpdateCurrentQuestionFile("")
+
+    #If the duration of a question changed and there was a question active, we need to adjust the time accordingly
+    if not current_question_index == -1 and not previous_duration_of_questions == script_settings.duration_of_questions:
+        global question_expiry_time
+        question_expiry_time = question_expiry_time + (script_settings.duration_of_questions - previous_duration_of_questions) * 60
+
+    #If the duration between questions changed and there is no question active, we need to adjust the time accordingly
+    if current_question_index == -1 and not previous_duration_between_questions == script_settings.duration_between_questions:
+        global question_start_time
+        question_start_time = question_start_time + (script_settings.duration_between_questions - previous_duration_between_questions) * 60
 
 def Log(message, level = DebugLevel.All):
     if script_settings.enable_file_logging:
@@ -638,27 +679,14 @@ def Log(message, level = DebugLevel.All):
 def Post(message):
     Parent.SendStreamMessage(message)
 
-def UpdateCurrentQuestionFile(line = None, duration = 1):
+def UpdateCurrentQuestionFile(line = None, duration_in_seconds = 1):
     if script_settings.create_current_question_file:
         global current_question_file
         global next_question_file_update_time
         file = open(current_question_file, "w+")
         file.seek(0)
         if line:
-            Log("UpdateCurrentQuestionFile: Line supplied to method. Writing line to file.", DebugLevel.Debug)
-            file.write(line + "                             ")
-        elif (not ready_for_next_question or script_settings.automatically_run_next_question) and current_question_index == -1:
-            #Display Countdown
-            file.write("Time until next question: " + str(datetime.fromtimestamp(question_start_time - time.time()).strftime('%M:%S')) + ".                         ")
-        elif ready_for_next_question and current_question_index == -1 and not script_settings.automatically_run_next_question:
-            #Display ready message
-            file.write("Next question ready. Type !trivia to begin!                             ")
-        elif not current_question_index == -1:
-            #Display current question
-            if script_settings.enable_arena_mode:
-                file.write(ParseString(str(datetime.fromtimestamp(question_expiry_time - time.time()).strftime('%M:%S')) + ") In $game, $question                          "))
-            else:
-                file.write(ParseString(str(datetime.fromtimestamp(question_expiry_time - time.time()).strftime('%M:%S')) + ") In $game, $question                          "))
+            file.write("Trivia: " + line)
         file.truncate()
         file.close()
-        next_question_file_update_time = time.time() + duration
+        next_question_file_update_time = time.time() + duration_in_seconds
