@@ -11,7 +11,7 @@
 		"type": "dropdown",
 		"value": "Everyone",
 		"items": ["Everyone","Regular","Subscriber","Moderator","Editor"],
-		"label": "Player Permissions",
+		"label": "Permissions to Play Trivia",
 		"tooltip": "Set the permission level for participating in trivia",
 		"group" : "General"
 	},
@@ -26,21 +26,21 @@
 	"duration_of_questions": {
 		"type": "numberbox",
 		"value": 5,
-		"label": "Question Duration",
+		"label": "Question Duration in Minutes",
 		"tooltip": "Amount of time in minutes questions last.",
 		"group": "General"
 	},
 	"duration_between_questions": {
 		"type": "numberbox",
 		"value": 5,
-		"label": "Delay Between Questions",
+		"label": "Delay Between Questions in Minutes",
 		"tooltip": "Amount of time in minutes between questions.",
 		"group": "General"
 	},
 	"automatically_run_next_question": {
 		"type": "checkbox",
 		"value": true,
-		"label": "Auto-run Next Question",
+		"label": "Auto-run Questions",
 		"tooltip": "Automatically run the next question. If false, users have to type !trivia to start the next question.",
 		"group": "General"
 	},
@@ -54,92 +54,128 @@
 	"no_winners_response_string": {
 		"type": "textbox",
 		"value": "Nobody answered the previous question. The answers were $answers.",
-		"label": "Show Answers Format",
+		"label": "Format of Shown Answers",
 		"tooltip": "How the trivia answers are displayed on expiry. Parameters: $index, $points, $currency, $game, $question, $answers",
 		"group" : "General"
+	},
+	"enable_game_detection": {
+		"type": "checkbox",
+		"value": false,
+		"label": "Enable Game Detection",
+		"tooltip": "If enabled, will log to trivialog.txt in the script directory.",
+		"group": "Game Detection"
+	},
+	"twitch_channel_name": {
+		"type": "textbox",
+		"value": "",
+		"label": "Twitch Username",
+		"tooltip": "Your username, used to fetch your last recorded game.",
+		"group": "Game Detection"
 	},
 	"standard_question_ask_string": {
 		"type": "textbox",
 		"value": "Win $points $currency by answering: In $game, $question",
-		"label": "Question Format",
+		"label": "Standard Mode Question Format",
 		"tooltip": "How the trivia questions are displayed in Standard Mode. Parameters: $index, $points, $currency, $game, $question, $answers",
 		"group" : "Standard Mode Settings"
 	},
 	"standard_question_reward_string": {
 		"type": "textbox",
 		"value": "$user has answered correctly and won $points $currency.",
-		"label": "Reward Format",
+		"label": "Standard Mode Reward Format",
 		"tooltip": "The string displayed when somebody correctly answers in Standard Mode. Parameters: $index, $points, $currency, $game, $question, $answers, $user",
 		"group" : "Standard Mode Settings"
 	},
 	"enable_arena_mode": {
 		"type": "checkbox",
 		"value": false,
-		"label": "Arena Mode",
+		"label": "Use Arena Mode",
 		"tooltip": "Questions last x amount of time, determined by QuestionDelayInMinutes. All users with the correct answers during that time are rewarded.",
 		"group": "Arena Settings"
 	},
 	"enable_arena_points_dividing": {
 		"type": "checkbox",
 		"value": false,
-		"label": "Points Division in Arena Mode",
+		"label": "Divide Points Among Winners",
 		"tooltip": "When multiple people correctly answer, should the reward points be divided among them?",
 		"group": "Arena Settings"
 	},
 	"arena_question_ask_string": {
 		"type": "textbox",
 		"value": "Win $points $currency by answering: In $game, $question",
-		"label": "Question Format",
+		"label": "Arena Mode Question Format",
 		"tooltip": "How the trivia questions are displayed in Arena Mode. Parameters: $index, $points, $currency, $game, $question, $answers",
 		"group" : "Arena Settings"
 	},
 	"arena_question_reward_string": {
 		"type": "textbox",
 		"value": "$user has answered correctly and won $points $currency.",
-		"label": "Reward Format",
+		"label": "Arena Mode Reward Format",
 		"tooltip": "The string displayed when somebody correctly answers in Arena Mode. Parameters: $index, $points, $currency, $game, $question, $answers, $user",
 		"group" : "Arena Settings"
 	},
 	"enable_loyalty_point_rewards": {
 		"type": "checkbox",
 		"value": true,
-		"label": "Loyalty Point Rewards",
+		"label": "Enable Loyalty Point Rewards",
 		"tooltip": "Correct trivia answers reward loyalty points.",
 		"group": "Reward Settings"
 	},
 	"default_loyalty_point_value": {
 		"type": "numberbox",
 		"value": 10,
-		"label": "Default Question Values",
+		"label": "Default Question Value",
 		"tooltip": "The default point value a question will have if none is supplied.",
 		"group": "Reward Settings"
 	},
-	"percent_loyalty_point_value_increase_on_unanswered": {
+	"reward_scaling": {
+		"type": "dropdown",
+		"value": "Off",
+		"items": ["Off","Random","Percentage"],
+		"label": "Reward Scaling",
+		"tooltip": "Random = questions reward a random percentage range of their base value as a reward. Percentage = points increase/decrease permanently when the question is answered/unanswered.",
+		"group" : "Reward Settings"
+	},
+	"point_value_random_lower_bound": {
 		"type": "numberbox",
 		"value": 0,
-		"label": "% Point Decrease On Correct Answer",
+		"label": "Random Scaling: Lower Bound Percentage",
+		"tooltip": "When using random scaling, the lower bound of possible point values is determined by this percentage.",
+		"group": "Reward Settings"
+	},
+	"point_value_random_upper_bound": {
+		"type": "numberbox",
+		"value": 0,
+		"label": "Random Scaling: Upper Bound Percentage",
+		"tooltip": "When using random scaling, the upper bound of possible point values is determined by this percentage.",
+		"group": "Reward Settings"
+	},
+	"point_value_decrease_answered": {
+		"type": "numberbox",
+		"value": 0,
+		"label": "Percentage Scaling: Point Decrease Percent on Answered",
 		"tooltip": "Future currency reward amount will decrease by this percentage when somebody correctly answers a question. Lowers the value of easy questions.",
 		"group": "Reward Settings"
 	},
-	"percent_loyalty_point_value_decrease_on_answered": {
+	"point_value_increase_unanswered": {
 		"type": "numberbox",
 		"value": 0,
-		"label": "% Point Increase On Unanswered",
+		"label": "Percentage Scaling: Point Increase Percent on Unanswered",
 		"tooltip": "Future currency reward amount will increase by this percentage when nobody correctly answers a question. Increases the value of hard questions.",
 		"group": "Reward Settings"
 	},
 	"create_current_question_file": {
 		"type": "checkbox",
 		"value": true,
-		"label": "Log current question to file.",
+		"label": "Write Question Text to File",
 		"tooltip": "Log the current question to a file, useful for displaying the question on screen with a Text widget. Disables ",
 		"group": "Output Settings"
 	},
 	"debug_level": {
 		"type": "dropdown",
 		"value": "Warn",
-		"items": ["All","Debug","Info","Warn","Fatal","None"],
-		"label": "Level of Chatbot Logging.",
+		"items": ["All","Debug","Info","Warn","Fatal","Nothing"],
+		"label": "Level of Chatbot Logging",
 		"tooltip": "Choose verbosity of chatbot logging. Higher levels include all lower levels.",
 		"group": "Output Settings"
 	},
