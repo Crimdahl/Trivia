@@ -94,7 +94,6 @@ class Settings(object):
             self.debug_level = "Warn"
             #self.enable_chat_errors = False
             #self.enable_chat_syntax_hints = True
-            self.enable_chat_command_confirmations = True
             self.enable_file_logging = False
 
             #Game Detection Settings
@@ -180,6 +179,9 @@ class Question(object):
     def raise_value_error(self, error_text):
         raise ValueError(error_text)
 
+    def __str__(self):
+        return "Game: " + self.game + ", Question: " + self.question
+
 class LoggingLevel(Enum):
     def __str__(self):
         return str(self.value)
@@ -204,11 +206,11 @@ def Init():
     script_settings.duration_of_questions = max(script_settings.duration_of_questions, 0)
     if script_settings.enable_game_detection:
         if script_settings.twitch_channel_name == "":
-            Log("NextQuestion: Game Detection has been enabled without being supplied a Twitch Username.", LoggingLevel.Fatal)
+            Log("Init: Game Detection has been enabled without being supplied a Twitch Username.", LoggingLevel.Fatal)
             raise AttributeError("Game Detection has been enabled without being supplied a Twitch Username.")
-        Log("NextQuestion: Game detection is enabled. Identifying most recent game.", LoggingLevel.Debug)
+        #Log("Init: Game detection is enabled. Identifying most recent game.", LoggingLevel.Debug)
         current_game = json.loads(Parent.GetRequest(twitch_api_source + script_settings.twitch_channel_name, {})).get("response")
-        Log("NextQuestion: Most recent game identified as " + str(current_game) + ".", LoggingLevel.Debug)
+        Log("Init: Most recent game identified as " + str(current_game) + ".", LoggingLevel.Info)
     LoadTrivia()
     Log("Init: Trivia Minigame Loaded", LoggingLevel.Info)
     return
@@ -222,8 +224,8 @@ def Execute(data):
     if not active:
         if Parent.HasPermission(data.User, script_settings.permissions_admins, "") and data.Message == "!trivia start":
             active = True
-            Log("Trivia Start: Minigame Started with Command", LoggingLevel.Debug)
-            if script_settings.enable_chat_command_confirmations: Post("Trivia Minigame Started.")
+            Log("Trivia Start: Started with Command.", LoggingLevel.Info)
+            Post("Trivia started.")
 
     #If (the streamer is live OR trivia can run when offline) and trivia is active...
     if (Parent.IsLive() or not script_settings.run_only_when_live) and active and data.IsChatMessage():
@@ -233,12 +235,14 @@ def Execute(data):
             if subcommand == "stop":
                 active = False
                 UpdateCurrentQuestionFile("")
-                Log("Trivia Stop: Minigame Stopped with Command", LoggingLevel.Debug)
-                if script_settings.enable_chat_command_confirmations: 
-                    Post("Trivia Minigame Stopped.")
+                Log("Trivia Stop: Stopped with Command.", LoggingLevel.Info)
+                Post("Trivia stopped.")
 
             elif subcommand == "count":
-                Post("Number of questions available: " + str(len(master_questions_list) + ". Number of questions being used: " + str(len(current_questions_list))))
+                if script_settings.enable_game_detection:
+                    Post("Total questions: " + str(len(master_questions_list)) + ". Questions from " + current_game + ": " + str(len(current_questions_list)) + ".")
+                else:
+                    Post("Number of questions available: " + str(len(master_questions_list)) + ".")
 
             elif subcommand == "answers":
                 if current_question_index == -1:
@@ -247,13 +251,12 @@ def Execute(data):
                     Post("Answers to the current question: " + ", ".join(current_questions_list[current_question_index].get_answers()))
 
             elif subcommand == "save":
-                SaveTrivia()
-                if script_settings.enable_chat_command_confirmations: 
-                    Post("Trivia save: Saved.")
+                if SaveTrivia():
+                    Post("Trivia saved.")
 
             elif subcommand == "load":
                 if data.GetParamCount() == 2 and len(current_questions_list) > 0:
-                    Log("!Trivia Load: Called.", LoggingLevel.Debug)
+                    #Log("!Trivia Load: Called.", LoggingLevel.Debug)
                     NextQuestion()
                     #No confirmation necessary - if a question is loaded successfully the result will be obvious
                 elif data.GetParamCount() == 3:
@@ -261,7 +264,7 @@ def Execute(data):
                         question_index = int(data.GetParam(2)) - 1
                         if question_index < 0 or question_index > len(current_questions_list) - 1:
                             raise IndexError("Question index out of bounds.")
-                        Log("!Trivia Load: Called with supplied index.", LoggingLevel.Debug)
+                        #Log("!Trivia Load: Called with supplied index.", LoggingLevel.Debug)
                         NextQuestion(question_index)
                     except (ValueError, IndexError) as e:
                         Log("Trivia Load: Question could not be loaded: " + str(e), LoggingLevel.Warn)
@@ -272,13 +275,14 @@ def Execute(data):
 
             elif subcommand == "add":
                 if data.GetParamCount() == 2:
-                    Post("Syntax: '!trivia add game:[game name], question:[trivia question], answers:[comma-separated list of answers]")
+                    Post("Syntax: '!trivia add game:<Game Name>, (points:<Points>,) question:<Question>, answers:<Pipe-Separated List of Answers>")
                 else:
                     #Get all of the required attributes from the message
                     #Try/catch to make sure points was convertible to an int
                     try:
                         new_points = int(GetAttribute("points", data.Message))
                     except ValueError:
+                        Log("Trivia Add: No point value was supplied. Using the default point value.", LoggingLevel.Debug)
                         new_points = script_settings.default_loyalty_point_value
 
                     try:
@@ -324,6 +328,7 @@ def Execute(data):
                         current_questions_list.append(new_question)
                     elif current_game == new_question.get_game():
                         current_questions_list.append(new_question)
+                        question_index_map.append(len(master_questions_list) - 1)
                     if SaveTrivia():
                         Log("Trivia Add: A new question has been added.", LoggingLevel.Info)
                         Post("Question added.")
@@ -337,18 +342,24 @@ def Execute(data):
                         global current_questions_list
                         question_index = int(data.GetParam(2)) - 1
                         old_question = current_questions_list.pop(question_index)
+
                         if script_settings.enable_game_detection:
-                            Log("Trivia Remove: A question is being removed with Enable Game Detection Mode. Master Question List Index " + str(question_index_map[question_index]) + 
-                                    ". Current Question List Index " + str(question_index) + ".", LoggingLevel.Debug)
+                            #Remove the question from the master question list using the index mapping
                             master_questions_list.pop(question_index_map[question_index])
+
+                            #Pop the question out of the question_index_map, since it no longer exists
+                            #For each remaining entry in the question_index_map, we need to reduce indexes by one to reflect that a question was removed from the master list
+                            question_index_map.pop(question_index)
+                            #Log("Number of indices after the question that was removed: " + str(len(question_index_map[question_index:])) + ".", LoggingLevel.Debug)
+                            question_index_map[question_index:] = [index - 1 for index in question_index_map[question_index:]]
                         else:
-                            Log("Trivia Remove: A question is being removed without Enable Game Detection Mode. Index " + str(question_index) + ".", LoggingLevel.Debug)
+                            #Log("Trivia Remove: A question is being removed without Enable Game Detection Mode. Index " + str(question_index) + ".", LoggingLevel.Debug)
                             master_questions_list.pop(question_index)
                         if question_index == current_question_index:
                             current_question_index = -1
                         if SaveTrivia():
                             Log("Trivia Remove: A question has been removed: " + str(old_question), LoggingLevel.Info)
-                            if script_settings.enable_chat_command_confirmations: Post("Question removed.")
+                            Post("Question removed.")
                     except (ValueError, IndexError) as e:
                         Log("Trivia Remove: Question could not be removed: " + str(e), LoggingLevel.Warn)
                         Post("Error removing question. Was the supplied index a number and between 1 and " + str(len(current_questions_list)) + "?")
@@ -392,22 +403,22 @@ def Execute(data):
                     if newGame: 
                         current_questions_list[question_index].set_game(newGame)
                         if script_settings.enable_game_detection:
-                            Log("Trivia Modify: A question game is being modified with Enable Game Detection Mode. Master Question List Index " + str(question_index_map[question_index]) + 
+                            Log("Trivia Modify: A question's game is being modified with Enable Game Detection Mode. Master Question List Index " + str(question_index_map[question_index]) + 
                                     ". Current Question List Index " + str(question_index) + ".", LoggingLevel.Debug)
                             master_questions_list[question_index_map[question_index]].set_game(newGame)
                         else:
-                            Log("Trivia Modify: A question game is being modified without Enable Game Detection Mode. Master Question List Index " + str(question_index_map[question_index]) + 
+                            Log("Trivia Modify: A question's game is being modified without Enable Game Detection Mode. Master Question List Index " + str(question_index_map[question_index]) + 
                                     ". Current Question List Index " + str(question_index) + ".", LoggingLevel.Debug)
                             master_questions_list[question_index].set_game(newGame)
                         changes = True
                     if newQuestion:
                         current_questions_list[question_index].set_question(newQuestion)
                         if script_settings.enable_game_detection:
-                            Log("Trivia Modify: A question question is being modified with Enable Game Detection Mode. Master Question List Index " + str(question_index_map[question_index]) + 
+                            Log("Trivia Modify: A question's question is being modified with Enable Game Detection Mode. Master Question List Index " + str(question_index_map[question_index]) + 
                                     ". Current Question List Index " + str(question_index) + ".", LoggingLevel.Debug)
                             master_questions_list[question_index_map[question_index]].set_question(newQuestion)
                         else:
-                            Log("Trivia Modify: A question question is being modified without Enable Game Detection Mode. Master Question List Index " + str(question_index_map[question_index]) + 
+                            Log("Trivia Modify: A question's question is being modified without Enable Game Detection Mode. Master Question List Index " + str(question_index_map[question_index]) + 
                                     ". Current Question List Index " + str(question_index) + ".", LoggingLevel.Debug)
                             master_questions_list[question_index].set_question(newQuestion)
                         changes = True
@@ -415,11 +426,11 @@ def Execute(data):
                         try:
                             current_questions_list[question_index].set_points(int(newPoints))
                             if script_settings.enable_game_detection:
-                                Log("Trivia Modify: A question value is being modified with Enable Game Detection Mode. Master Question List Index " + str(question_index_map[question_index]) + 
+                                Log("Trivia Modify: A question's value is being modified with Enable Game Detection Mode. Master Question List Index " + str(question_index_map[question_index]) + 
                                         ". Current Question List Index " + str(question_index) + ".", LoggingLevel.Debug)
                                 master_questions_list[question_index_map[question_index]].set_points(int(newPoints))
                             else:
-                                Log("Trivia Modify: A question value is being modified without Enable Game Detection Mode. Master Question List Index " + str(question_index_map[question_index]) + 
+                                Log("Trivia Modify: A question's value is being modified without Enable Game Detection Mode. Master Question List Index " + str(question_index_map[question_index]) + 
                                     ". Current Question List Index " + str(question_index) + ".", LoggingLevel.Debug)
                                 master_questions_list[question_index].set_points(int(newPoints))
                             changes = True
@@ -429,11 +440,11 @@ def Execute(data):
                     if newAnswerSet:
                         current_questions_list[question_index].set_answers(newAnswerSet)
                         if script_settings.enable_game_detection:
-                            Log("Trivia Modify: A question answer set is being modified with Enable Game Detection Mode. Master Question List Index " + str(question_index_map[question_index]) + 
+                            Log("Trivia Modify: A question's answer set is being modified with Enable Game Detection Mode. Master Question List Index " + str(question_index_map[question_index]) + 
                                     ". Current Question List Index " + str(question_index) + ".", LoggingLevel.Debug)
                             master_questions_list[question_index_map[question_index]].set_answers(newAnswerSet)
                         else:
-                            Log("Trivia Modify: A question answer set is being modified with Enable Game Detection Mode. Master Question List Index " + str(question_index_map[question_index]) + 
+                            Log("Trivia Modify: A question's answer set is being modified with Enable Game Detection Mode. Master Question List Index " + str(question_index_map[question_index]) + 
                                     ". Current Question List Index " + str(question_index) + ".", LoggingLevel.Debug)
                             master_questions_list[question_index].set_answers(newAnswerSet)
                         changes = True
@@ -563,13 +574,13 @@ def EndQuestion():
                 if str(script_settings.reward_scaling).lower() == "random":
                     global current_question_points
                     points_being_rewarded = current_question_points
-                    Log("EndQuestion: Random points rewarded by question: " + str(points_being_rewarded) + ".", LoggingLevel.Debug)
+                    #Log("EndQuestion: Random points rewarded by question: " + str(points_being_rewarded) + ".", LoggingLevel.Debug)
                 else:
                     points_being_rewarded = current_questions_list[current_question_index].get_points()
-                    Log("EndQuestion: Base points rewarded by question: " + str(points_being_rewarded) + ".", LoggingLevel.Debug)
+                    #Log("EndQuestion: Base points rewarded by question: " + str(points_being_rewarded) + ".", LoggingLevel.Debug)
                 if script_settings.enable_arena_points_dividing:
                     points_being_rewarded = points_being_rewarded / len(correct_users_dict)
-                    Log("EndQuestion: Divided points rewarded by question: " + str(points_being_rewarded) + ".", LoggingLevel.Debug)
+                    #Log("EndQuestion: Divided points rewarded by question: " + str(points_being_rewarded) + ".", LoggingLevel.Debug)
 
             #Iterate through the correct users dictionary
             correct_usernames = []
@@ -577,11 +588,11 @@ def EndQuestion():
                 if script_settings.enable_loyalty_point_rewards:
                     Parent.AddPoints(user_ID, correct_users_dict[user_ID], points_being_rewarded)
                     Log("EndQuestion: Adding " + str(points_being_rewarded) + " " + Parent.GetCurrencyName() + " to user " + correct_users_dict[user_ID] + ".", LoggingLevel.Debug)
-                Log("EndQuestion: Adding user ID " + str(user_ID) + " to the list of correct users with the username " + correct_users_dict[user_ID] + ".", LoggingLevel.Debug)
+                #Log("EndQuestion: Adding user ID " + str(user_ID) + " to the list of correct users with the username " + correct_users_dict[user_ID] + ".", LoggingLevel.Debug)
                 correct_usernames.append(correct_users_dict[user_ID])
             correct_users_dict.clear()
             correct_usernames.sort()
-            Log("EndQuestion: Final correct users list for this reward: " + str(correct_usernames), LoggingLevel.Debug)
+            #Log("EndQuestion: Final correct users list for this reward: " + str(correct_usernames), LoggingLevel.Debug)
 
             #Reduce the reward for that question, if desired
             if script_settings.percent_loyalty_point_value_decrease_on_answered > 0:
@@ -599,24 +610,32 @@ def EndQuestion():
                     global next_question_file_update_time
                     UpdateCurrentQuestionFile(ParseString(string = script_settings.arena_question_reward_string, points = points_being_rewarded, users = correct_usernames), 10)
                 else:
-                    Post(ParseString(string = script_settings.arena_question_reward_string, points = points_being_rewarded, users = correct_usernames))
+                    if script_settings.duration_between_questions > 0:
+                        Post(ParseString(string = script_settings.arena_question_reward_string, points = points_being_rewarded, users = correct_usernames) + " The next question will be arrive in " + str(script_settings.duration_between_questions) + " minute(s).")
+                    else:
+                        Post(ParseString(string = script_settings.arena_question_reward_string, points = points_being_rewarded, users = correct_usernames))
             else:
                 if script_settings.create_current_question_file:
                     global next_question_file_update_time
-                    global question_start_time
                     UpdateCurrentQuestionFile(ParseString(string = script_settings.standard_question_reward_string, points = points_being_rewarded, users = correct_usernames), 10)
                 else:
-                    Post(ParseString(string = script_settings.standard_question_reward_string, points = points_being_rewarded, users = correct_usernames))
+                    if script_settings.duration_between_questions > 0: 
+                        Post(ParseString(string = script_settings.standard_question_reward_string, points = points_being_rewarded, users = correct_usernames) + " The next question will be arrive in " + str(script_settings.duration_between_questions) + " minute(s).")
+                    else:
+                        Post(ParseString(string = script_settings.standard_question_reward_string, points = points_being_rewarded, users = correct_usernames))
         else:
-            Log("EndQuestion: No winners detected.", LoggingLevel.Debug)
+            #Log("EndQuestion: No winners detected.", LoggingLevel.Debug)
             if script_settings.show_answers_if_no_winners:
-                Log("EndQuestion: Setting to show answers enabled. Answers are [" + ",".join(current_questions_list[current_question_index].get_answers()) + "].", LoggingLevel.Debug)
+                #Log("EndQuestion: Setting to show answers enabled. Answers are [" + ",".join(current_questions_list[current_question_index].get_answers()) + "].", LoggingLevel.Debug)
                 if script_settings.create_current_question_file:
                     global next_question_file_update_time
                     global question_start_time
                     UpdateCurrentQuestionFile(ParseString(string = script_settings.no_winners_response_string), 10)
                 else:
                     Post(ParseString(string = script_settings.no_winners_response_string))
+            else:
+                if script_settings.duration_between_questions > 0:
+                    Post("Nobody answered the previous question. The next question will be arrive in " + str(script_settings.duration_between_questions) + " minute(s).")
             if int(script_settings.percent_loyalty_point_value_increase_on_unanswered) > 0:
                 question_points = current_questions_list[current_question_index].get_points()
                 new_points = int(question_points + question_points * (script_settings.percent_loyalty_point_value_increase_on_unanswered / 100.0))
@@ -632,7 +651,7 @@ def EndQuestion():
     ready_for_next_question = False
 
 def NextQuestion(question_index = -1):
-    Log("NextQuestion: Called with index of " + str(question_index) + ".", LoggingLevel.Debug)
+    #Log("NextQuestion: Called with index of " + str(question_index) + ".", LoggingLevel.Debug)
     global current_question_index
     global question_expiry_time
     global ready_for_next_question
@@ -644,13 +663,14 @@ def NextQuestion(question_index = -1):
         if script_settings.twitch_channel_name == "":
             Log("NextQuestion: Game Detection has been enabled without being supplied a Twitch Username.", LoggingLevel.Fatal)
             raise AttributeError("Game Detection has been enabled without being supplied a Twitch Username.")
-        Log("NextQuestion: Game detection is enabled. Identifying most recent game.", LoggingLevel.Debug)
+        #Log("NextQuestion: Game detection is enabled. Identifying most recent game.", LoggingLevel.Debug)
         previous_game = current_game
         current_game = json.loads(Parent.GetRequest(twitch_api_source + script_settings.twitch_channel_name, {})).get("response")
-        Log("NextQuestion: Most recent game identified as " + str(current_game) + ".", LoggingLevel.Debug)
+        #Log("NextQuestion: Most recent game identified as " + str(current_game) + ".", LoggingLevel.Debug)
 
         #If their active game has changed, reload the current question list
         if not previous_game == current_game:
+            Log("NextQuestion: Game change detected. New game is " + str(current_game) + ". Loading new question set.", LoggingLevel.Info)
             LoadTrivia()
 
     previous_question_index = -1
@@ -666,27 +686,26 @@ def NextQuestion(question_index = -1):
             current_question_index = Parent.GetRandom(0,len(current_questions_list))
     else:
         current_question_index = question_index
-    Log("NextQuestion: Loaded question at Index " + str(current_question_index + 1) + ".", LoggingLevel.Debug)
+    #Log("NextQuestion: Loaded question at Index " + str(current_question_index + 1) + ".", LoggingLevel.Debug)
     
     #If random point scaling is in effect, determine the point reward here
     if str(script_settings.reward_scaling).lower() == "random":
-        Log("NextQuestion: Points randomizing using range: " + str(float(script_settings.point_value_random_lower_bound) / 100) + "x to " + str(float(script_settings.point_value_random_upper_bound) / 100) + "x.", LoggingLevel.Info)
+        #Log("NextQuestion: Points randomizing using range: " + str(float(script_settings.point_value_random_lower_bound) / 100) + "x to " + str(float(script_settings.point_value_random_upper_bound) / 100) + "x.", LoggingLevel.Debug)
         if script_settings.point_value_random_upper_bound > script_settings.point_value_random_lower_bound:
             random_value_multiplier = float(Parent.GetRandom(script_settings.point_value_random_lower_bound, script_settings.point_value_random_upper_bound)) / 100
         elif script_settings.point_value_random_lower_bound > script_settings.point_value_random_upper_bound:
             random_value_multiplier = float(Parent.GetRandom(script_settings.point_value_random_upper_bound, script_settings.point_value_random_lower_bound)) / 100
         else: 
             random_value_multiplier = script_settings.point_value_random_lower_bound
-        Log("NextQuestion: Question multiplier: " + str(random_value_multiplier) + "x.", LoggingLevel.Fatal)
+        #Log("NextQuestion: Question multiplier: " + str(random_value_multiplier) + "x.", LoggingLevel.Debug)
         current_question_points = int(ceil(current_questions_list[current_question_index].get_points() * random_value_multiplier))
-        Log("NextQuestion: Randomized points awarded by question: " + str(current_question_points) + ".", LoggingLevel.Debug)
+        #Log("NextQuestion: Randomized points awarded by question: " + str(current_question_points) + ".", LoggingLevel.Debug)
 
     if not script_settings.create_current_question_file:
-        Log("Script is creating current question file? " + str(script_settings.create_current_question_file))
         if script_settings.enable_arena_mode:
-            Post(ParseString("Multiple users can win $points $currency by answering: $index) In $game, $question"))
+            Post(ParseString(string = script_settings.arena_question_ask_string))
         else:
-            Post(ParseString("For $points $currency: $index) In $game, $question"))
+            Post(ParseString(string = script_settings.standard_question_ask_string))
     question_expiry_time = time.time() + ((script_settings.duration_of_questions) * 60)
     Log("NextQuestion: Next Question at " + datetime.fromtimestamp(question_expiry_time).strftime('%H:%M:%S') + ".", LoggingLevel.Debug)
     ready_for_next_question = False
@@ -701,7 +720,7 @@ def GetAttribute(attribute, message):
     except ValueError as e:
         Log("GetAttribute: The attribute was not found in the message.", LoggingLevel.Debug)
         if attribute.lower() == "points=":
-            Log("GetAttribute: Default points are being applied.", LoggingLevel.Debug)
+            #Log("GetAttribute: Default points are being applied.", LoggingLevel.Debug)
             return script_settings.default_loyalty_point_value
         raise e
     #The end index of the attribute is at the last space before the next attribute designator, or at the end of the message
@@ -711,7 +730,7 @@ def GetAttribute(attribute, message):
         #If this error is thrown, the end of the message was hit, so just return all of the remaining message
         return message[index_of_beginning_of_attribute:].strip()
     result = message[index_of_beginning_of_attribute:index_of_beginning_of_attribute + index_of_end_of_attribute].strip().strip(",")
-    Log("GetAttribute: " + attribute + " successfully retrieved with a value of \"" + result + "\".", LoggingLevel.Debug)
+    #Log("GetAttribute: " + attribute + " successfully retrieved with a value of \"" + result + "\".", LoggingLevel.Debug)
     return result
 
 def ParseString(string, points = -1, users = []):
@@ -740,7 +759,7 @@ def SaveTrivia():
         if not os.path.exists(questions_file):
             with io.open(questions_file, 'w') as outfile:
                 outfile.write(json.dumps({}))
-            Log("SaveTrivia: The trivia file was not found. A new one was created.", LoggingLevel.Info)
+            Log("SaveTrivia: The trivia file was not found. A new one was created.", LoggingLevel.Warn)
 
         #record the questions
         with open (questions_file, 'w') as outfile:
@@ -774,10 +793,8 @@ def LoadTrivia():
                 for question in objectdata:
                     new_question = Question(game=question["Game"], points=question["Points"], question=question["Question"], answers=question["Answers"])
                     master_questions_list.append(new_question)
-                    
-                Log("LoadTrivia: Questions loaded into master: " + str(len(master_questions_list)), LoggingLevel.Debug)
             except ValueError:
-                Log("LoadTrivia: Question file exists, but contains no data.", LoggingLevel.Warn)
+                Log("LoadTrivia: Question file exists, but contained no data.", LoggingLevel.Warn)
         else:
             Log("LoadTrivia: No questions file exists.", LoggingLevel.Warn)
     
@@ -795,12 +812,12 @@ def LoadTrivia():
                 if master_questions_list[i].get_game() == current_game:
                     current_questions_list.append(master_questions_list[i])
                     question_index_map.append(i)
-        Log("LoadTrivia: Questions loaded into current: " + str(len(current_questions_list)), LoggingLevel.Debug)
+    Log("LoadTrivia: Questions loaded into master list: " + str(len(master_questions_list)) + ". Questions currently being used: " + str(len(current_questions_list)), LoggingLevel.Info)
         
 #Reload Settings (Called when a user clicks the Save Settings button in the Chatbot UI)
 def ReloadSettings(jsonData):
     # Execute json reloading here
-    Log("ReloadSettings: Saving settings.", LoggingLevel.Debug)
+    Log("ReloadSettings: Saving settings from Chatbot UI...", LoggingLevel.Info)
     global script_settings
     global current_question_index
     previous_game_detection = script_settings.enable_game_detection
@@ -808,7 +825,6 @@ def ReloadSettings(jsonData):
     previous_duration_between_questions = script_settings.duration_between_questions
     script_settings.__dict__ = json.loads(jsonData)
     script_settings.Save(settings_file)
-    Log("ReloadSettings: Settings saved and applied successfully", LoggingLevel.Debug)
 
     #If the user disabled the usage of the script file, empty the file so the on screen display goes away
     if not script_settings.create_current_question_file:
@@ -824,9 +840,19 @@ def ReloadSettings(jsonData):
         global question_start_time
         question_start_time = question_start_time + (script_settings.duration_between_questions - previous_duration_between_questions) * 60
 
-    #If the user has toggled game detection, reload the current question list
+    #If the user has toggled game detection, reload the current question list and update current game
     if not previous_game_detection == script_settings.enable_game_detection:
+        global current_game
+        if not script_settings.enable_game_detection:
+            current_game = ""
+            Log("ReloadSettings: Game Detection deactivated. Reloading questions.", LoggingLevel.Info)
+        else:
+            current_game = json.loads(Parent.GetRequest(twitch_api_source + script_settings.twitch_channel_name, {})).get("response")
+            Log("ReloadSettings: Game Detection activated. Most recent game identified as " + str(current_game) + ". Reloading questions.", LoggingLevel.Info)
+        
         LoadTrivia()
+
+    Log("ReloadSettings: Settings saved and applied successfully", LoggingLevel.Info)
 
 def Log(message, level = LoggingLevel.All):
     if script_settings.enable_file_logging:
@@ -835,7 +861,7 @@ def Log(message, level = LoggingLevel.All):
         file.writelines(str(datetime.now()).ljust(26) + " " + str(level.name + ":").ljust(10) + message + "\n")
         file.close()
     if LoggingLevel[script_settings.debug_level].value <= level.value:
-        Parent.Log(ScriptName, message)
+        Parent.Log(ScriptName, "(" + str(level.name) + ") " + message)
 
 def Post(message):
     Parent.SendStreamMessage(message)
