@@ -784,6 +784,7 @@ def LoadTrivia():
     #Check if the length of the master questions list is greater than 0.
     if len(master_questions_list) > 0:
         del current_questions_list[:]
+        del question_index_map[:]
         #If the length of the master questions list is greater than 0, we can check if the user is using game detection
         if not script_settings.enable_game_detection:
             #User is not using game detection. Copy the master list to the current questions list
