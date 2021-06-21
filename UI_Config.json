@@ -163,7 +163,7 @@
 	},
 	"debug_level": {
 		"type": "dropdown",
-		"value": "Warn",
+		"value": "Info",
 		"items": ["All","Debug","Info","Warn","Fatal","Nothing"],
 		"label": "Level of Chatbot Logging",
 		"tooltip": "Choose verbosity of chatbot logging. Higher levels include all lower levels.",
