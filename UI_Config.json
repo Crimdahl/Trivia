@@ -4,65 +4,76 @@
 		"type": "checkbox",
 		"value": true,
 		"label": "Only Run When Live",
-		"tooltip": "Run the trivia minigame only when you are live.",
-		"group": "General"
+		"tooltip": "Run the trivia minigame only when you are live."
 	},
 	"permissions_players": {
 		"type": "dropdown",
 		"value": "Everyone",
 		"items": ["Everyone","Regular","Subscriber","Moderator","Editor"],
 		"label": "Permissions to Play Trivia",
-		"tooltip": "Set the permission level for participating in trivia",
-		"group" : "General"
+		"tooltip": "Set the permission level for participating in trivia"
 	},
 	"permissions_admins": {
 		"type": "dropdown",
 		"value": "Moderator",
 		"items": ["Everyone","Regular","Subscriber","Moderator","Editor"],
 		"label": "Admin Permissions",
-		"tooltip": "Set the permission level for adding, removing, modifying questions and other tasks",
-		"group" : "General"
+		"tooltip": "Set the permission level for adding, removing, modifying questions and other tasks"
 	},
 	"duration_of_questions": {
 		"type": "numberbox",
 		"value": 5,
 		"label": "Question Duration in Minutes",
 		"tooltip": "Amount of time in minutes questions last.",
-		"group": "General"
+		"group": "Question Settings"
 	},
 	"duration_between_questions": {
 		"type": "numberbox",
 		"value": 5,
 		"label": "Delay Between Questions in Minutes",
 		"tooltip": "Amount of time in minutes between questions.",
-		"group": "General"
+		"group": "Question Settings"
 	},
 	"automatically_run_next_question": {
 		"type": "checkbox",
 		"value": true,
 		"label": "Auto-run Questions",
-		"tooltip": "Automatically run the next question. If false, users have to type !trivia to start the next question.",
-		"group": "General"
+		"tooltip": "Automatically run the next question? If false, users have to type !trivia to start the next question.",
+		"group": "Question Settings"
 	},
-	"show_answers_if_no_winners": {
-		"type": "checkbox",
-		"value": false,
-		"label": "Show Answers on Unanswered",
-		"tooltip": "Show the question's answer(s) if nobody answers the question.",
-		"group": "General"
+	"duration_between_ready_notifications":{
+		"type": "numberbox",
+		"value": 10,
+		"label": "Delay Between Ready Notifications in Minutes",
+		"tooltip": "If not auto-running questions, the amount of time between recurring chat notifications that a question is available.",
+		"group": "Question Settings"
 	},
-	"no_winners_response_string": {
+	"question_ask_string": {
+		"type": "textbox",
+		"value": "Win $points $currency by answering: In $game, $question",
+		"label": "Question String Format",
+		"tooltip": "How the trivia questions are displayed in Standard Mode. Parameters: $index, $points, $currency, $game, $question, $answers",
+		"group" : "Question Settings"
+	},
+	"question_reward_string": {
+		"type": "textbox",
+		"value": "$user has answered correctly and won $points $currency.",
+		"label": "Reward String Format",
+		"tooltip": "The string displayed when somebody correctly answers in Standard Mode. Parameters: $index, $points, $currency, $game, $question, $answers, $users",
+		"group" : "Question Settings"
+	},
+	"question_expiration_string": {
 		"type": "textbox",
 		"value": "Nobody answered the previous question. The answers were $answers.",
-		"label": "Format of Shown Answers",
+		"label": "Expiration String Format",
 		"tooltip": "How the trivia answers are displayed on expiry. Parameters: $index, $points, $currency, $game, $question, $answers",
-		"group" : "General"
+		"group" : "Question Settings"
 	},
 	"enable_game_detection": {
 		"type": "checkbox",
 		"value": false,
 		"label": "Enable Game Detection",
-		"tooltip": "If enabled, will log to trivialog.txt in the script directory.",
+		"tooltip": "If enabled, queries Twitch's API to get the last known game on the channel of the person whose name is in Twitch Username, then filters questions by that game.",
 		"group": "Game Detection"
 	},
 	"twitch_channel_name": {
@@ -72,25 +83,11 @@
 		"tooltip": "Your username, used to fetch your last recorded game.",
 		"group": "Game Detection"
 	},
-	"standard_question_ask_string": {
-		"type": "textbox",
-		"value": "Win $points $currency by answering: In $game, $question",
-		"label": "Standard Mode Question Format",
-		"tooltip": "How the trivia questions are displayed in Standard Mode. Parameters: $index, $points, $currency, $game, $question, $answers",
-		"group" : "Standard Mode Settings"
-	},
-	"standard_question_reward_string": {
-		"type": "textbox",
-		"value": "$user has answered correctly and won $points $currency.",
-		"label": "Standard Mode Reward Format",
-		"tooltip": "The string displayed when somebody correctly answers in Standard Mode. Parameters: $index, $points, $currency, $game, $question, $answers, $users",
-		"group" : "Standard Mode Settings"
-	},
 	"enable_arena_mode": {
 		"type": "checkbox",
 		"value": false,
 		"label": "Use Arena Mode",
-		"tooltip": "Questions last x amount of time, determined by QuestionDelayInMinutes. All users with the correct answers during that time are rewarded.",
+		"tooltip": "Questions do not end after the first correct answer. All correct answers within the questions duration are rewarded at the end.",
 		"group": "Arena Settings"
 	},
 	"enable_arena_points_dividing": {
@@ -99,20 +96,6 @@
 		"label": "Divide Points Among Winners",
 		"tooltip": "When multiple people correctly answer, should the reward points be divided among them?",
 		"group": "Arena Settings"
-	},
-	"arena_question_ask_string": {
-		"type": "textbox",
-		"value": "Win $points $currency by answering: In $game, $question",
-		"label": "Arena Mode Question Format",
-		"tooltip": "How the trivia questions are displayed in Arena Mode. Parameters: $index, $points, $currency, $game, $question, $answers",
-		"group" : "Arena Settings"
-	},
-	"arena_question_reward_string": {
-		"type": "textbox",
-		"value": "$user has answered correctly and won $points $currency.",
-		"label": "Arena Mode Reward Format",
-		"tooltip": "The string displayed when somebody correctly answers in Arena Mode. Parameters: $index, $points, $currency, $game, $question, $answers, $users",
-		"group" : "Arena Settings"
 	},
 	"enable_loyalty_point_rewards": {
 		"type": "checkbox",
@@ -123,7 +106,7 @@
 	},
 	"default_loyalty_point_value": {
 		"type": "numberbox",
-		"value": 10,
+		"value": 50,
 		"label": "Default Question Value",
 		"tooltip": "The default point value a question will have if none is supplied.",
 		"group": "Reward Settings"
@@ -138,37 +121,37 @@
 	},
 	"point_value_random_lower_bound": {
 		"type": "numberbox",
-		"value": 0,
+		"value": 50,
 		"label": "Random Scaling: Lower Bound Percentage",
 		"tooltip": "When using random scaling, the lower bound of possible point values is determined by this percentage.",
 		"group": "Reward Settings"
 	},
 	"point_value_random_upper_bound": {
 		"type": "numberbox",
-		"value": 0,
+		"value": 200,
 		"label": "Random Scaling: Upper Bound Percentage",
 		"tooltip": "When using random scaling, the upper bound of possible point values is determined by this percentage.",
 		"group": "Reward Settings"
 	},
 	"point_value_decrease_answered": {
 		"type": "numberbox",
-		"value": 0,
+		"value": 5,
 		"label": "Percentage Scaling: Point Decrease Percent on Answered",
 		"tooltip": "Future currency reward amount will decrease by this percentage when somebody correctly answers a question. Lowers the value of easy questions.",
 		"group": "Reward Settings"
 	},
 	"point_value_increase_unanswered": {
 		"type": "numberbox",
-		"value": 0,
+		"value": 10,
 		"label": "Percentage Scaling: Point Increase Percent on Unanswered",
 		"tooltip": "Future currency reward amount will increase by this percentage when nobody correctly answers a question. Increases the value of hard questions.",
 		"group": "Reward Settings"
 	},
 	"create_current_question_file": {
 		"type": "checkbox",
-		"value": true,
+		"value": false,
 		"label": "Write Question Text to File",
-		"tooltip": "Log the current question to a file, useful for displaying the question on screen with a Text widget. Disables ",
+		"tooltip": "Log the current question to a file, useful for displaying the question on screen with a Text widget. Disables most chat-based output.",
 		"group": "Output Settings"
 	},
 	"enable_file_logging": {
@@ -185,5 +168,5 @@
 		"label": "Level of Chatbot Logging",
 		"tooltip": "Choose verbosity of chatbot logging. Higher levels include all lower levels.",
 		"group": "Output Settings"
-	},
+	}
 }
