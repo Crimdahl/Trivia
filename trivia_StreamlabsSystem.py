@@ -15,13 +15,13 @@ from math import ceil
 ScriptName = "Trivia"
 Website = "https://twitch.tv/crimdahl"
 Creator = "Crimdahl"
-Version = ".1"
+Version = "1.0-Beta"
 Description = "Trivia Minigame"
 #---------------------------------------
 # Versions
 #---------------------------------------
 """ Most recent Release
-.1  Initial beta release
+1.0-Beta  Initial beta release
 
 """
 #---------------------------------------
