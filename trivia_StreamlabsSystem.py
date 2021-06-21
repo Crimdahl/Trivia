@@ -21,7 +21,7 @@ Description = "Trivia Minigame"
 # Versions
 #---------------------------------------
 """ Most recent Release
-.1  
+.1  Initial beta release
 
 """
 #---------------------------------------
