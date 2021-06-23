@@ -654,63 +654,69 @@ def EndQuestion():
 
 def NextQuestion(question_index = -1):
     #Log("NextQuestion: Called with index of " + str(question_index) + ".", LoggingLevel.Debug)
-    global current_question_index
-    global question_expiry_time
-    global ready_for_next_question
-    global current_game
-    global current_question_points
+    global current_questions_list
+    if len(current_questions_list) > 0:
+        global current_question_index
+        global question_expiry_time
+        global ready_for_next_question
+        global current_game
+        global current_question_points
 
-    if script_settings.enable_game_detection:
-        #If the user is using game detection, check to see if their game has changed before loading the next question
-        if script_settings.twitch_channel_name == "":
-            Log("NextQuestion: Game Detection has been enabled without being supplied a Twitch Username.", LoggingLevel.Fatal)
-            raise AttributeError("Game Detection has been enabled without being supplied a Twitch Username.")
-        #Log("NextQuestion: Game detection is enabled. Identifying most recent game.", LoggingLevel.Debug)
-        previous_game = current_game
-        current_game = json.loads(Parent.GetRequest(twitch_api_source + script_settings.twitch_channel_name, {})).get("response")
-        #Log("NextQuestion: Most recent game identified as " + str(current_game) + ".", LoggingLevel.Debug)
+        if script_settings.enable_game_detection:
+            #If the user is using game detection, check to see if their game has changed before loading the next question
+            if script_settings.twitch_channel_name == "":
+                Log("NextQuestion: Game Detection has been enabled without being supplied a Twitch Username.", LoggingLevel.Fatal)
+                raise AttributeError("Game Detection has been enabled without being supplied a Twitch Username.")
+            #Log("NextQuestion: Game detection is enabled. Identifying most recent game.", LoggingLevel.Debug)
+            previous_game = current_game
+            current_game = json.loads(Parent.GetRequest(twitch_api_source + script_settings.twitch_channel_name, {})).get("response")
+            #Log("NextQuestion: Most recent game identified as " + str(current_game) + ".", LoggingLevel.Debug)
 
-        #If their active game has changed, reload the current question list
-        if not previous_game == current_game:
-            Log("NextQuestion: Game change detected. New game is " + str(current_game) + ". Loading new question set.", LoggingLevel.Info)
-            LoadTrivia()
+            #If their active game has changed, reload the current question list
+            if not previous_game == current_game:
+                Log("NextQuestion: Game change detected. New game is " + str(current_game) + ". Loading new question set.", LoggingLevel.Info)
+                LoadTrivia()
 
-    previous_question_index = -1
-    previous_question_index = current_question_index  #Log the previous question to prevent duplicates 
-    #Start up a new question, avoiding using the same question twice in a row
-    if question_index == -1:
-        if previous_question_index != -1 and len(current_questions_list) > 1:
-            while True:
+        previous_question_index = -1
+        previous_question_index = current_question_index  #Log the previous question to prevent duplicates 
+        #Start up a new question, avoiding using the same question twice in a row
+        if question_index == -1:
+            if previous_question_index != -1 and len(current_questions_list) > 1:
+                while True:
+                    current_question_index = Parent.GetRandom(0,len(current_questions_list))
+                    if current_question_index != previous_question_index: 
+                        break
+            else: 
                 current_question_index = Parent.GetRandom(0,len(current_questions_list))
-                if current_question_index != previous_question_index: 
-                    break
-        else: 
-            current_question_index = Parent.GetRandom(0,len(current_questions_list))
-    else:
-        current_question_index = question_index
-    #Log("NextQuestion: Loaded question at Index " + str(current_question_index + 1) + ".", LoggingLevel.Debug)
-    
-    #If random point scaling is in effect, determine the point reward here
-    if str(script_settings.reward_scaling).lower() == "random":
-        #Log("NextQuestion: Points randomizing using range: " + str(float(script_settings.point_value_random_lower_bound) / 100) + "x to " + str(float(script_settings.point_value_random_upper_bound) / 100) + "x.", LoggingLevel.Debug)
-        if script_settings.point_value_random_upper_bound > script_settings.point_value_random_lower_bound:
-            random_value_multiplier = float(Parent.GetRandom(script_settings.point_value_random_lower_bound, script_settings.point_value_random_upper_bound)) / 100
-        elif script_settings.point_value_random_lower_bound > script_settings.point_value_random_upper_bound:
-            random_value_multiplier = float(Parent.GetRandom(script_settings.point_value_random_upper_bound, script_settings.point_value_random_lower_bound)) / 100
-        else: 
-            random_value_multiplier = script_settings.point_value_random_lower_bound
-        #Log("NextQuestion: Question multiplier: " + str(random_value_multiplier) + "x.", LoggingLevel.Debug)
-        current_question_points = int(ceil(current_questions_list[current_question_index].get_points() * random_value_multiplier))
-        #Log("NextQuestion: Randomized points awarded by question: " + str(current_question_points) + ".", LoggingLevel.Debug)
-
-    if not script_settings.create_current_question_file:
-        if script_settings.enable_arena_mode:
-            Post(ParseString(string = script_settings.question_ask_string))
         else:
-            Post(ParseString(string = script_settings.question_ask_string))
-    question_expiry_time = time.time() + ((script_settings.duration_of_questions) * 60)
-    Log("NextQuestion: Next Question at " + datetime.fromtimestamp(question_expiry_time).strftime('%H:%M:%S') + ".", LoggingLevel.Debug)
-    ready_for_next_question = False
+            current_question_index = question_index
+        #Log("NextQuestion: Loaded question at Index " + str(current_question_index + 1) + ".", LoggingLevel.Debug)
+        
+        #If random point scaling is in effect, determine the point reward here
+        if str(script_settings.reward_scaling).lower() == "random":
+            #Log("NextQuestion: Points randomizing using range: " + str(float(script_settings.point_value_random_lower_bound) / 100) + "x to " + str(float(script_settings.point_value_random_upper_bound) / 100) + "x.", LoggingLevel.Debug)
+            if script_settings.point_value_random_upper_bound > script_settings.point_value_random_lower_bound:
+                random_value_multiplier = float(Parent.GetRandom(script_settings.point_value_random_lower_bound, script_settings.point_value_random_upper_bound)) / 100
+            elif script_settings.point_value_random_lower_bound > script_settings.point_value_random_upper_bound:
+                random_value_multiplier = float(Parent.GetRandom(script_settings.point_value_random_upper_bound, script_settings.point_value_random_lower_bound)) / 100
+            else: 
+                random_value_multiplier = script_settings.point_value_random_lower_bound
+            #Log("NextQuestion: Question multiplier: " + str(random_value_multiplier) + "x.", LoggingLevel.Debug)
+            current_question_points = int(ceil(current_questions_list[current_question_index].get_points() * random_value_multiplier))
+            #Log("NextQuestion: Randomized points awarded by question: " + str(current_question_points) + ".", LoggingLevel.Debug)
+
+        if not script_settings.create_current_question_file:
+            if script_settings.enable_arena_mode:
+                Post(ParseString(string = script_settings.question_ask_string))
+            else:
+                Post(ParseString(string = script_settings.question_ask_string))
+        question_expiry_time = time.time() + ((script_settings.duration_of_questions) * 60)
+        Log("NextQuestion: Next Question at " + datetime.fromtimestamp(question_expiry_time).strftime('%H:%M:%S') + ".", LoggingLevel.Debug)
+        ready_for_next_question = False
+    else:
+        global question_start_time
+        Log("NextQuestion: No questions exist. Trying again in 60 seconds.", LoggingLevel.Warn)
+        question_start_time = time.time() + 60
 
 def GetAttribute(attribute, message):
     Log("GetAttribute: Called with message \"" + message + "\" looking for attribute \"" + attribute + "\".", LoggingLevel.Debug)
