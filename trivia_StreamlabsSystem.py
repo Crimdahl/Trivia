@@ -5,7 +5,6 @@
 # Libraries and references
 #---------------------------------------
 import os, io, json, codecs, time
-from enum import Enum
 from datetime import datetime
 from math import ceil
 
