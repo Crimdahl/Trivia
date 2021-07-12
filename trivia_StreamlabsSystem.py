@@ -22,6 +22,7 @@ Description = "Trivia Minigame"
 """ Most recent Release
 1.0-Beta    Initial beta release
 1.0.1-Beta  Fixed Unhandled Exception in NextQuestion
+1.1.0-Beta  Added new options. Added support for multiple winners. Removed arena mode.
 
 """
 #---------------------------------------
@@ -43,10 +44,10 @@ current_game = ""                   #Current game, as returned by an API call
 question_start_time = time.time()   #What time does the next question start?
 ready_for_next_question = True      #Boolean used when questions do not automatically start.
 readiness_notification_time = time.time()
-question_expiry_time = 0            #How many minutes questions last
+question_expiry_time = 0
 next_question_file_update_time = 0  #How long should the script go between the last file update and the next file update
 
-correct_users_dict = {}             #Dictionary of users that gave correct answers, used in Arena Mode
+correct_users_dict = {}             #Dictionary of users that gave correct answers, used in multi-reward mode
 
 active = True                       #Is the script running?
 script_settings = None              #Settings variable
@@ -71,14 +72,15 @@ class Settings(object):
             self.duration_between_questions = 5
             self.automatically_run_next_question = True
             self.question_ask_string = "Win $points $currency by answering: $index) In $game, $question"
-            self.question_reward_string = "$users has answered correctly and won $points $currency."
+            self.question_reward_string = "$winnerlist answered correctly and won $points $currency."
             self.question_expiration_string = "Nobody answered the previous question. The answers were: $answers."
-
-            #Arena Mode Settings
-            self.enable_arena_mode = False
-            self.enable_arena_points_dividing = False
+            self.question_file_ask_string = "$timeremaining) In $game, $question"
+            self.question_file_reward_string = "$winnerlist answered correctly and won $points $currency."
+            self.question_file_expiration_string = "Nobody answered the previous question. The answers were: $answers."
 
             #Trivia Rewards
+            self.number_of_winners = 1
+            self.enable_points_dividing = True
             self.enable_loyalty_point_rewards = True
             self.default_loyalty_point_value = 10
             self.reward_scaling = False
@@ -207,10 +209,13 @@ class LoggingLevel():
 def Init():
     global script_settings
     global current_game
+    global question_expiry_time
     script_settings = Settings(settings_file)
     script_settings.Save(settings_file)
     script_settings.duration_between_questions = max(script_settings.duration_between_questions, 0)
     script_settings.duration_of_questions = max(script_settings.duration_of_questions, 0)
+    question_expiry_time = script_settings.duration_of_questions * 60 
+
     if script_settings.enable_game_detection:
         if script_settings.twitch_channel_name == "":
             Log("Init: Game Detection has been enabled without being supplied a Twitch Username.", LoggingLevel.str_to_int.get("Fatal"))
@@ -240,6 +245,9 @@ def Execute(data):
         #Check if the chatter has administrator permissions. If so, see if they are running an admin command.
         if str(data.Message).startswith("!trivia") and (Parent.HasPermission(data.User, script_settings.permissions_admins, "") or user_id == "216768170") and data.GetParamCount() > 0:
             subcommand = data.GetParam(1)
+            global current_game
+            global master_questions_list
+            global current_questions_list
             if subcommand == "stop":
                 active = False
                 UpdateCurrentQuestionFile("")
@@ -247,7 +255,9 @@ def Execute(data):
                 Post("Trivia stopped.")
 
             elif subcommand == "count":
+                #Return a count of the number of questions available
                 if script_settings.enable_game_detection:
+                    #Also include the number of questions currently matching the game
                     Post("Total questions: " + str(len(master_questions_list)) + ". Questions from " + current_game + ": " + str(len(current_questions_list)) + ".")
                 else:
                     Post("Number of questions available: " + str(len(master_questions_list)) + ".")
@@ -327,9 +337,6 @@ def Execute(data):
                         i = i + 1
                         
                     #create the Question object and add it to the list of questions, then save the new list of questions
-                    global master_questions_list
-                    global current_questions_list
-                    global current_game
                     new_question = Question(game=new_game, points=new_points, question=new_question_text, answers=new_answers)
                     master_questions_list.append(new_question)
                     if not script_settings.enable_game_detection:
@@ -346,8 +353,6 @@ def Execute(data):
                     Post("Syntax: !trivia remove <Question Index>")
                 else:
                     try:
-                        global master_questions_list
-                        global current_questions_list
                         question_index = int(data.GetParam(2)) - 1
                         old_question = current_questions_list.pop(question_index)
 
@@ -385,8 +390,6 @@ def Execute(data):
                         Post("Error: The supplied index was not a number.")
                         return
 
-                    global master_questions_list
-                    global current_questions_list
                     changes = False
                     newGame = None
                     newQuestion = None
@@ -499,7 +502,7 @@ def Execute(data):
                         Log("Trivia: There is no trivia question active.", LoggingLevel.str_to_int.get("Info"))
                         Post("There are no active trivia questions. The next trivia question arrives in " + str(datetime.fromtimestamp(question_start_time - time.time()).strftime('%M minutes and %S seconds.')))
                 else:
-                    Post(ParseString(script_settings.question_ask_string) + " Time remaining: " + str(datetime.fromtimestamp(question_expiry_time - time.time()).strftime('%M minutes and %S seconds.')))
+                    Post(ParseString(script_settings.question_ask_string + " Time remaining: $timeremaining."))
             elif current_question_index != -1:
                 CheckForMatch(data)
             
@@ -513,20 +516,18 @@ def Tick():
         # If time has expired, check to see if there is a current question
         # If there is a current question, depending on settings the answers may need to be displayed and the points adjusted
         current_time = time.time()
+        global current_question_index
 
         if not current_question_index == -1:
             #There is a current question
             if current_time > question_expiry_time:
                 #The question has expired. End the question.
-                global current_question_index
                 Log("Tick: Question time exceeded. Ending question.", LoggingLevel.str_to_int.get("Debug"))
                 EndQuestion()
+
             elif script_settings.create_current_question_file and (current_time > next_question_file_update_time):
                 #The question has not expired. Display the question and the remaining time.
-                if script_settings.enable_arena_mode:
-                    UpdateCurrentQuestionFile(ParseString(str(datetime.fromtimestamp(question_expiry_time - time.time()).strftime('%M:%S')) + ") In $game, $question"), 1)
-                else:
-                    UpdateCurrentQuestionFile(ParseString(str(datetime.fromtimestamp(question_expiry_time - time.time()).strftime('%M:%S')) + ") In $game, $question"), 1)
+                UpdateCurrentQuestionFile(ParseString(script_settings.question_file_ask_string), 1)
             
         else:
             #There is no current question
@@ -561,111 +562,99 @@ def CheckForMatch(data):
     try:
         current_question = current_questions_list[current_question_index]
         current_answers = current_question.get_answers()
+        #Iterate through all valid answers comparing them to the data message
         for answer in current_answers:
             if data.Message.lower() == answer.lower():
+                #We have a match. Add them to the dictionary of correct users, then check to see if the question needs to be ended.
                 correct_users_dict[data.User] = data.UserName
                 Log("CheckForMatch: Match detected between answer " + answer + " and message " + data.Message + ". User " + data.UserName + " added to the list of correct users.", LoggingLevel.str_to_int.get("Debug"))
-                if not script_settings.enable_arena_mode:
-                    Log("CheckForMatch: Arena mode is not active. Ending question.", LoggingLevel.str_to_int.get("Debug"))
+                Log("CheckForMatch: Max number of winners: " + str(script_settings.number_of_winners) + ". Current number of winners: " + str(len(correct_users_dict)) + ".", LoggingLevel.str_to_int.get("Debug"))
+                if script_settings.number_of_winners > 0 and len(correct_users_dict) >= script_settings.number_of_winners:
+                    Log("CheckForMatch: Number of winners achieved. Ending question.", LoggingLevel.str_to_int.get("Debug"))
                     EndQuestion()
-                    return
-            else:
-                Log("CheckForMatch: No match detected between answer " + answer + " and message \"" + data.Message + "\".", LoggingLevel.str_to_int.get("Debug"))
-        Log("CheckForMatch: No match detected in the message from user " + data.UserName + ".", LoggingLevel.str_to_int.get("Debug"))                  
-        return False
     except IndexError:
         current_question_index = -1
-        return False
 
 def EndQuestion():
     global current_question_index
+    global question_start_time
+
+    #First, check to see if there is an active question. If there is no active question, nothing needs to be done.
     if not current_question_index == -1:
-        #Question is ending. Reward users, if desired
+        #Check to see if there were any correct answers.
         if len(correct_users_dict) > 0:
             Log("EndQuestion: Winners detected. Distributing points.", LoggingLevel.str_to_int.get("Debug"))
-            #Get the number of points being rewarded
-            points_being_rewarded = 0
-            if script_settings.enable_loyalty_point_rewards:
-                if str(script_settings.reward_scaling).lower() == "random":
-                    global current_question_points
-                    points_being_rewarded = current_question_points
-                    #Log("EndQuestion: Random points rewarded by question: " + str(points_being_rewarded) + ".", LoggingLevel.str_to_int.get("Debug"))
-                else:
-                    points_being_rewarded = current_questions_list[current_question_index].get_points()
-                    #Log("EndQuestion: Base points rewarded by question: " + str(points_being_rewarded) + ".", LoggingLevel.str_to_int.get("Debug"))
-                if script_settings.enable_arena_points_dividing:
-                    points_being_rewarded = points_being_rewarded / len(correct_users_dict)
-                    #Log("EndQuestion: Divided points rewarded by question: " + str(points_being_rewarded) + ".", LoggingLevel.str_to_int.get("Debug"))
-
-            #Iterate through the correct users dictionary
-            correct_usernames = []
+            correct_usernames = []      #We need to grab a list of usernames to congratulate.
+            #Iterate over the dictionary of correct users
             for user_ID in correct_users_dict.keys():
+                #If users are getting loyalty point rewards, reward the winners
                 if script_settings.enable_loyalty_point_rewards:
-                    Parent.AddPoints(user_ID, correct_users_dict[user_ID], points_being_rewarded)
-                    Log("EndQuestion: Adding " + str(points_being_rewarded) + " " + Parent.GetCurrencyName() + " to user " + correct_users_dict[user_ID] + ".", LoggingLevel.str_to_int.get("Debug"))
-                #Log("EndQuestion: Adding user ID " + str(user_ID) + " to the list of correct users with the username " + correct_users_dict[user_ID] + ".", LoggingLevel.str_to_int.get("Debug"))
+                    #Determine if points are being divided amongst winners
+                    if script_settings.enable_points_dividing:
+                        Parent.AddPoints(user_ID, correct_users_dict[user_ID], ceil(current_question_points / len(correct_users_dict)))
+                        Log("EndQuestion: Adding " + str(ceil(current_question_points / len(correct_users_dict))) + " " + Parent.GetCurrencyName() + " to user " + correct_users_dict[user_ID] + ".", LoggingLevel.str_to_int.get("Debug"))
+                    else:
+                        Parent.AddPoints(user_ID, correct_users_dict[user_ID], current_question_points)
+                        Log("EndQuestion: Adding " + str(current_question_points) + " " + Parent.GetCurrencyName() + " to user " + correct_users_dict[user_ID] + ".", LoggingLevel.str_to_int.get("Debug"))
                 correct_usernames.append(correct_users_dict[user_ID])
-            correct_users_dict.clear()
-            correct_usernames.sort()
-            #Log("EndQuestion: Final correct users list for this reward: " + str(correct_usernames), LoggingLevel.str_to_int.get("Debug"))
+            correct_users_dict.clear()      #Clear the winners dictionary for use with the next question
+            correct_usernames.sort()        #Sort the list of winning usernames alphabetically
 
-            #Reduce the reward for that question, if desired
+            #Reduce the reward for that question, if desired.
             if script_settings.percent_loyalty_point_value_decrease_on_answered > 0:
-                question_points = current_questions_list[current_question_index].get_points()
+                #Get the question's current points.
+                question_points = current_questions_list[current_question_index].get_points()  
+                #Determine the new points by multiplying the current points by a multiplier. 
                 new_points = int(question_points - (question_points * (script_settings.percent_loyalty_point_value_decrease_on_answered / 100.0)))
+                #Assign the new value.
                 current_questions_list[current_question_index].set_points(new_points)
                 Log("EndQuestion: Reducing points for question at index " + str(current_question_index + 1) + " by " + 
                     str(script_settings.percent_loyalty_point_value_decrease_on_answered) + " percent. (" + str(question_points) + " - " + 
                     str(int(question_points * (script_settings.percent_loyalty_point_value_decrease_on_answered / 100.0))) + " = " + str(new_points) + ")", LoggingLevel.str_to_int.get("Debug"))
+                #Save the question.
                 SaveTrivia()
 
             #Post message rewarding users
-            if script_settings.enable_arena_mode:
-                if script_settings.create_current_question_file:
-                    global next_question_file_update_time
-                    UpdateCurrentQuestionFile(ParseString(string = script_settings.question_reward_string, points = points_being_rewarded, users = correct_usernames), 10)
-                else:
-                    if script_settings.duration_between_questions > 0:
-                        Post(ParseString(string = script_settings.question_reward_string, points = points_being_rewarded, users = correct_usernames) + " The next question will arrive in " + str(script_settings.duration_between_questions) + " minute(s).")
-                    else:
-                        Post(ParseString(string = script_settings.question_reward_string, points = points_being_rewarded, users = correct_usernames))
+            if script_settings.create_current_question_file:
+                UpdateCurrentQuestionFile(ParseString(string = script_settings.question_file_reward_string, users = correct_usernames), 10)
             else:
-                if script_settings.create_current_question_file:
-                    global next_question_file_update_time
-                    UpdateCurrentQuestionFile(ParseString(string = script_settings.question_reward_string, points = points_being_rewarded, users = correct_usernames), 10)
+                if script_settings.duration_between_questions > 0:
+                    Post(ParseString(string = script_settings.question_reward_string, users = correct_usernames) + " The next question will arrive in " + str(script_settings.duration_between_questions) + " minute(s).")
                 else:
-                    if script_settings.duration_between_questions > 0: 
-                        Post(ParseString(string = script_settings.question_reward_string, points = points_being_rewarded, users = correct_usernames) + " The next question will arrive in " + str(script_settings.duration_between_questions) + " minute(s).")
-                    else:
-                        Post(ParseString(string = script_settings.question_reward_string, points = points_being_rewarded, users = correct_usernames))
+                    Post(ParseString(string = script_settings.question_reward_string, users = correct_usernames))
         else:
             #No winners were detected. Display expiration message.
             if script_settings.create_current_question_file:
-                global next_question_file_update_time
-                global question_start_time
-                UpdateCurrentQuestionFile(ParseString(string = script_settings.question_expiration_string), 10)
+                UpdateCurrentQuestionFile(ParseString(string = script_settings.question_file_expiration_string), 10)
             else:
                 if script_settings.duration_between_questions > 0:
                     Post(ParseString(string = script_settings.question_expiration_string) + " The next question will arrive in " + str(script_settings.duration_between_questions) + " minute(s).")
                 else:
                     Post(ParseString(string = script_settings.question_expiration_string))
+
+            #Increase the reward for that question, if desired.
             if int(script_settings.percent_loyalty_point_value_increase_on_unanswered) > 0:
+                #Get the question's current points.
                 question_points = current_questions_list[current_question_index].get_points()
+                #Determine the new points by multiplying the current points by a multiplier. 
                 new_points = int(question_points + question_points * (script_settings.percent_loyalty_point_value_increase_on_unanswered / 100.0))
+                #Assign the new value.
                 current_questions_list[current_question_index].set_points(new_points)
                 Log("EndQuestion: Increasing points for question at index " + str(current_question_index + 1) + " by " + 
                     str(script_settings.percent_loyalty_point_value_increase_on_unanswered) + " percent. (" + str(question_points) + " + " + 
                     str(int(question_points * (script_settings.percent_loyalty_point_value_increase_on_unanswered / 100.0))) + " = " + str(new_points) + ")", LoggingLevel.str_to_int.get("Debug"))
+                #Save the question.
                 SaveTrivia()
-    current_question_index = -1
-    global question_start_time
-    global ready_for_next_question
-    question_start_time = time.time() + (script_settings.duration_between_questions * 60)
-    ready_for_next_question = False
+
+        #End current question and set the next question's start time.
+        current_question_index = -1
+        question_start_time = time.time() + (script_settings.duration_between_questions * 60)
+        global ready_for_next_question
+        ready_for_next_question = False
 
 def NextQuestion(question_index = -1):
-    #Log("NextQuestion: Called with index of " + str(question_index) + ".", LoggingLevel.str_to_int.get("Debug"))
     global current_questions_list
+    #Check to see if questions exist
     if len(current_questions_list) > 0:
         global current_question_index
         global question_expiry_time
@@ -673,24 +662,23 @@ def NextQuestion(question_index = -1):
         global current_game
         global current_question_points
 
+        #If the user is using game detection, check to see if their game has changed before loading the next question
         if script_settings.enable_game_detection:
-            #If the user is using game detection, check to see if their game has changed before loading the next question
             if script_settings.twitch_channel_name == "":
                 Log("NextQuestion: Game Detection has been enabled without being supplied a Twitch Username.", LoggingLevel.str_to_int.get("Fatal"))
                 raise AttributeError("Game Detection has been enabled without being supplied a Twitch Username.")
-            #Log("NextQuestion: Game detection is enabled. Identifying most recent game.", LoggingLevel.str_to_int.get("Debug"))
             previous_game = current_game
             current_game = json.loads(Parent.GetRequest(twitch_api_source + script_settings.twitch_channel_name, {})).get("response")
-            #Log("NextQuestion: Most recent game identified as " + str(current_game) + ".", LoggingLevel.str_to_int.get("Debug"))
 
             #If their active game has changed, reload the current question list
             if not previous_game == current_game:
                 Log("NextQuestion: Game change detected. New game is " + str(current_game) + ". Loading new question set.", LoggingLevel.str_to_int.get("Info"))
                 LoadTrivia()
 
-        previous_question_index = -1
-        previous_question_index = current_question_index  #Log the previous question to prevent duplicates 
-        #Start up a new question, avoiding using the same question twice in a row
+        #Log the previous question to prevent duplicates 
+        previous_question_index = current_question_index  
+
+        #Start up a new question, avoiding using the same question twice in a row if possible
         if question_index == -1:
             if previous_question_index != -1 and len(current_questions_list) > 1:
                 while True:
@@ -701,30 +689,30 @@ def NextQuestion(question_index = -1):
                 current_question_index = Parent.GetRandom(0,len(current_questions_list))
         else:
             current_question_index = question_index
-        #Log("NextQuestion: Loaded question at Index " + str(current_question_index + 1) + ".", LoggingLevel.str_to_int.get("Debug"))
         
         #If random point scaling is in effect, determine the point reward here
         if str(script_settings.reward_scaling).lower() == "random":
-            #Log("NextQuestion: Points randomizing using range: " + str(float(script_settings.point_value_random_lower_bound) / 100) + "x to " + str(float(script_settings.point_value_random_upper_bound) / 100) + "x.", LoggingLevel.str_to_int.get("Debug"))
+            #Perform some conditionals to make sure that everything works no matter which numbers are entered in which box
             if script_settings.point_value_random_upper_bound > script_settings.point_value_random_lower_bound:
                 random_value_multiplier = float(Parent.GetRandom(script_settings.point_value_random_lower_bound, script_settings.point_value_random_upper_bound)) / 100
             elif script_settings.point_value_random_lower_bound > script_settings.point_value_random_upper_bound:
                 random_value_multiplier = float(Parent.GetRandom(script_settings.point_value_random_upper_bound, script_settings.point_value_random_lower_bound)) / 100
             else: 
                 random_value_multiplier = script_settings.point_value_random_lower_bound
-            #Log("NextQuestion: Question multiplier: " + str(random_value_multiplier) + "x.", LoggingLevel.str_to_int.get("Debug"))
             current_question_points = int(ceil(current_questions_list[current_question_index].get_points() * random_value_multiplier))
-            #Log("NextQuestion: Randomized points awarded by question: " + str(current_question_points) + ".", LoggingLevel.str_to_int.get("Debug"))
+        else:
+            current_question_points = current_questions_list[current_question_index].get_points()
 
+        #If we are not logging to a file, post the question in chat. File display is handled by tick().
         if not script_settings.create_current_question_file:
-            if script_settings.enable_arena_mode:
-                Post(ParseString(string = script_settings.question_ask_string))
-            else:
-                Post(ParseString(string = script_settings.question_ask_string))
+            Post(ParseString(string = script_settings.question_ask_string))
+
+        #Set the question expiration time
         question_expiry_time = time.time() + ((script_settings.duration_of_questions) * 60)
         Log("NextQuestion: Next Question at " + datetime.fromtimestamp(question_expiry_time).strftime('%H:%M:%S') + ".", LoggingLevel.str_to_int.get("Debug"))
         ready_for_next_question = False
     else:
+        #If questions do not exist, try again every 60 seconds
         global question_start_time
         Log("NextQuestion: No questions exist. Trying again in 60 seconds.", LoggingLevel.str_to_int.get("Warn"))
         question_start_time = time.time() + 60
@@ -755,24 +743,52 @@ def GetAttribute(attribute, message):
 def ParseString(string, points = -1, users = []):
     #Apply question attributes to a string
     global current_question_index
-    if points == -1:
-        points = current_questions_list[current_question_index].get_points()
+
+    #Replace the $index parameter with the index of the current question
     string = string.replace("$index", str(current_question_index + 1))
+
+    #Replace the $currency parameter with the name of the channel's currency
     string = string.replace("$currency", str(Parent.GetCurrencyName()))
+
+    #Replace the $question parameter with the text of the current question
     string = string.replace("$question", current_questions_list[current_question_index].get_question())
-    if script_settings.enable_loyalty_point_rewards:
-        if str(script_settings.reward_scaling).lower() == "random":
-            global current_question_points
-            string = string.replace("$points", str(current_question_points))
-        else:
-            string = string.replace("$points", str(points))
-    else:
-        string = string.replace("$points", "0")
+
+    #Replace the $points parameter with the points of the current question
+    string = string.replace("$points", str(current_question_points))
+    
+    #Replace the $answers parameter with a list of correct answers for the current question
     string = string.replace("$answers", ", ".join(current_questions_list[current_question_index].get_answers()))
+
+    #Replace the $game parameter with the game of the current question
     string = string.replace("$game", current_questions_list[current_question_index].get_game())
-    string = string.replace("$users", ", ".join(users))
+
+    #Replace the $pointswon parameter with the points won by each person
+    if script_settings.enable_loyalty_point_rewards and len(correct_users_dict) > 0:
+        if script_settings.enable_points_dividing:
+            #If people loyalty point rewards are enabled and 
+            string = string.replace("$pointswon", str(ceil(current_question_points / len(correct_users_dict))))
+        else:
+            string = string.replace("$pointswon", str(current_question_points))
+    else:
+        #If nobody is winning points, replace with 0
+        string = string.replace("$pointswon", "0")
+
+    #Replace the $winnerspossible parameter with the number of possible winners
+    string = string.replace("$winnerspossible", str(script_settings.number_of_winners))
+
+    #Replace the $winnercount parameter with the number of actual winners
+    string = string.replace("$winnercount", str(len(correct_users_dict)))
+
+    #Replace the $winnerlist parameter with a list of users that answered the current question correctly
+    string = string.replace("$winnerlist", ", ".join(users))
+    
+    #Replace the $timeremaining parameter with hte remaining time of the current question
+    global question_expiry_time
+    string = string.replace("$timeremaining", str(datetime.fromtimestamp(question_expiry_time - time.time()).strftime('%M minutes and %S seconds')))
+    
+    #Replace the $time parameter with the time between questions
     string = string.replace("$time", str(script_settings.duration_of_questions))
-    #Log("ParseString: Result of string parsing: \"" + string + "\"", LoggingLevel.str_to_int.get("Debug"))
+
     return string
 
 def SaveTrivia():
@@ -808,8 +824,6 @@ def LoadTrivia():
                     objectdata = json.load(infile)    #Load the json data
 
                 #For each object/question in the objectdata, create new questions and feed them to the master_questions_list
-                    #If game detection is off, feed them to the g
-                global master_questions_list
                 global current_questions_list
                 global current_game
                 for question in objectdata:
