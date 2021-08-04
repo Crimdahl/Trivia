@@ -27,11 +27,32 @@
 		"tooltip": "Amount of time in minutes questions last.",
 		"group": "Question Settings"
 	},
-	"duration_between_questions": {
+	"cooldown_between_questions": {
 		"type": "numberbox",
 		"value": 5,
-		"label": "Delay Between Questions in Minutes",
+		"label": "Cooldown Between Questions in Minutes",
 		"tooltip": "Amount of time in minutes between questions.",
+		"group": "Question Settings"
+	},
+	"randomize_question_cooldown": {
+		"type": "checkbox",
+		"value": true,
+		"label": "Randomize Question Cooldown",
+		"tooltip": "Randomize the cooldown between questions using the lower and upper bound percentages.",
+		"group": "Question Settings"
+	},
+	"question_cooldown_random_lower_bound": {
+		"type": "numberbox",
+		"value": 50,
+		"label": "Random question cooldown: Lower Bound Percentage",
+		"tooltip": "The lower bound of possible question cooldowns is determined by this percentage.",
+		"group": "Question Settings"
+	},
+	"question_cooldown_random_upper_bound": {
+		"type": "numberbox",
+		"value": 200,
+		"label": "Random question cooldown: Upper Bound Percentage",
+		"tooltip": "The upper bound of possible question cooldowns is determined by this percentage.",
 		"group": "Question Settings"
 	},
 	"automatically_run_next_question": {
