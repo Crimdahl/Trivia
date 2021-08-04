@@ -168,6 +168,13 @@
 		"tooltip": "Future currency reward amount will increase by this percentage when nobody correctly answers a question. Increases the value of hard questions.",
 		"group": "Reward Settings"
 	},
+	"display_next_question_time": {
+		"type": "checkbox",
+		"value": false,
+		"label": "Display Next Question Time",
+		"tooltip": "When a user does !trivia, display the amount of time until the next question.",
+		"group": "Output Settings"
+	},
 	"create_current_question_file": {
 		"type": "checkbox",
 		"value": false,

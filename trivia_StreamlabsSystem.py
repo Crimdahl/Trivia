@@ -33,6 +33,7 @@ Description = "Trivia Minigame"
             Checked current_questions_length before posting to chat in a couple of places. Don't want to tell people
                 questions are ready when questions do not exist.
             Reformatted a lot of code to be PEP-8 compliant
+1.0.3-Beta  Added option to disable display of the question's time of arrival with !trivia.
 """
 # ---------------------------------------
 # Global Variables
@@ -104,6 +105,7 @@ class Settings(object):
             self.percent_loyalty_point_value_decrease_on_answered = 0
 
             # Output Settings
+            self.display_next_question_time = False
             self.create_current_question_file = False
             self.debug_level = "Warn"
             self.enable_file_logging = False
@@ -580,10 +582,13 @@ def Execute(data):
                         next_question_file_update_time = time.time()
                         readiness_notification_time = time.time()
                     else:
-                        Log("!Trivia: There is no trivia question active.", LoggingLevel.str_to_int.get("Info"))
-                        Post("There are no active trivia questions. The next trivia question arrives in " + str(
-                            datetime.fromtimestamp(question_start_time - time.time()).strftime(
-                                '%M minutes and %S seconds.')))
+                        Log("!Trivia: There is no active trivia question.", LoggingLevel.str_to_int.get("Info"))
+                        if script_settings.display_next_question_time:
+                            Post("There is no active trivia question. The next trivia question arrives in " + str(
+                                datetime.fromtimestamp(question_start_time - time.time()).strftime(
+                                    '%M minutes and %S seconds.')))
+                        else:
+                            Post("There is no active trivia question.")
                 else:
                     Post(parse_string(script_settings.question_ask_string) + " Time remaining: " + str(
                         datetime.fromtimestamp(question_expiry_time - time.time()).strftime(
