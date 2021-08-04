@@ -1,5 +1,5 @@
 {
-	"output_file": "settings.json",	
+	"output_file": "settings.json",
 	"run_only_when_live": {
 		"type": "checkbox",
 		"value": true,
@@ -62,7 +62,7 @@
 		"tooltip": "Automatically run the next question? If false, users have to type !trivia to start the next question.",
 		"group": "Question Settings"
 	},
-	"duration_between_ready_notifications":{
+	"duration_between_ready_notifications": {
 		"type": "numberbox",
 		"value": 10,
 		"label": "Delay Between Ready Notifications in Minutes",
@@ -71,24 +71,45 @@
 	},
 	"question_ask_string": {
 		"type": "textbox",
-		"value": "Win $points $currency by answering: In $game, $question",
-		"label": "Question String Format",
-		"tooltip": "How the trivia questions are displayed in Standard Mode. Parameters: $index, $points, $currency, $game, $question, $answers",
-		"group" : "Question Settings"
+		"value": "Win $points $currency by answering: $index) In $game, $question",
+		"label": "Question String Format (Chat)",
+		"tooltip": "How the trivia questions are displayed in Standard Mode. Parameters: $index, $points, $currency, $game, $question, $answers, $timeremaining, $winnerspossible",
+		"group": "Question Settings"
 	},
 	"question_reward_string": {
 		"type": "textbox",
-		"value": "$user has answered correctly and won $points $currency.",
-		"label": "Reward String Format",
-		"tooltip": "The string displayed when somebody correctly answers in Standard Mode. Parameters: $index, $points, $currency, $game, $question, $answers, $users",
-		"group" : "Question Settings"
+		"value": "$winnerlist answered correctly and won $pointswon $currency.",
+		"label": "Reward String Format (Chat)",
+		"tooltip": "The string displayed when the question ends with winners. Parameters: $index, $points, $currency, $game, $question, $answers, $winnerlist, $winnercount",
+		"group": "Question Settings"
 	},
 	"question_expiration_string": {
 		"type": "textbox",
 		"value": "Nobody answered the previous question. The answers were $answers.",
-		"label": "Expiration String Format",
-		"tooltip": "How the trivia answers are displayed on expiry. Parameters: $index, $points, $currency, $game, $question, $answers",
-		"group" : "Question Settings"
+		"label": "Expiration String Format (Chat)",
+		"tooltip": "The string displayed when there are no winners. Parameters: $index, $points, $currency, $game, $question, $answers",
+		"group": "Question Settings"
+	},
+	"question_file_ask_string": {
+		"type": "textbox",
+		"value": "$timeremaining) In $game, $question",
+		"label": "Question String Format (File)",
+		"tooltip": "The format of questions written to file. Parameters: $index, $points, $currency, $game, $question, $answers, $timeremaining, $winnerspossible",
+		"group": "Question Settings"
+	},
+	"question_file_reward_string": {
+		"type": "textbox",
+		"value": "$winnerlist answered correctly and won $pointswon $currency.",
+		"label": "Reward String Format (File)",
+		"tooltip": "The string written to file when there are winners. Parameters: $index, $points, $currency, $game, $question, $answers, $winnerlist, $winnercount",
+		"group": "Question Settings"
+	},
+	"question_file_expiration_string": {
+		"type": "textbox",
+		"value": "Nobody answered the previous question. The answers were $answers.",
+		"label": "Expiration String Format (File)",
+		"tooltip": "The string written to file when there are no winners. Parameters: $index, $points, $currency, $game, $question, $answers",
+		"group": "Question Settings"
 	},
 	"enable_game_detection": {
 		"type": "checkbox",
@@ -103,20 +124,6 @@
 		"label": "Twitch Username",
 		"tooltip": "Your username, used to fetch your last recorded game.",
 		"group": "Game Detection"
-	},
-	"enable_arena_mode": {
-		"type": "checkbox",
-		"value": false,
-		"label": "Use Arena Mode",
-		"tooltip": "Questions do not end after the first correct answer. All correct answers within the questions duration are rewarded at the end.",
-		"group": "Arena Settings"
-	},
-	"enable_arena_points_dividing": {
-		"type": "checkbox",
-		"value": false,
-		"label": "Divide Points Among Winners",
-		"tooltip": "When multiple people correctly answer, should the reward points be divided among them?",
-		"group": "Arena Settings"
 	},
 	"enable_loyalty_point_rewards": {
 		"type": "checkbox",
@@ -138,7 +145,7 @@
 		"items": ["Off","Random","Percentage"],
 		"label": "Reward Scaling",
 		"tooltip": "Random = questions reward a random percentage range of their base value as a reward. Percentage = points increase/decrease permanently when the question is answered/unanswered.",
-		"group" : "Reward Settings"
+		"group": "Reward Settings"
 	},
 	"point_value_random_lower_bound": {
 		"type": "numberbox",
@@ -166,6 +173,34 @@
 		"value": 10,
 		"label": "Percentage Scaling: Point Increase Percent on Unanswered",
 		"tooltip": "Future currency reward amount will increase by this percentage when nobody correctly answers a question. Increases the value of hard questions.",
+		"group": "Reward Settings"
+	},
+	"number_of_winners": {
+		"type": "numberbox",
+		"value": 1,
+		"label": "Number of people that can win.",
+		"tooltip": "Questions do not end until X people have answered. 0 = unlimited. All correct answers are rewarded at the end.",
+		"group": "Reward Settings"
+	},
+	"enable_grace_period": {
+		"type": "checkbox",
+		"value": false,
+		"label": "Use Question End Grace Period",
+		"tooltip": "Enable a grace period between the first successful answer and the question ending. Allows additional answers to come in for a limited time, but reduces spam and copycatting.",
+		"group": "Reward Settings"
+	},
+	"grace_period_duration_in_seconds": {
+		"type": "numberbox",
+		"value": 1,
+		"label": "Grace Period in Seconds",
+		"tooltip": "The duration of the grace period in seconds.",
+		"group": "Reward Settings"
+	},
+	"enable_points_dividing": {
+		"type": "checkbox",
+		"value": true,
+		"label": "Divide Points Among Winners",
+		"tooltip": "When multiple people correctly answer, should the reward points be divided among them?",
 		"group": "Reward Settings"
 	},
 	"display_next_question_time": {
