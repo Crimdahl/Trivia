@@ -18,7 +18,7 @@ from math import ceil
 ScriptName = "Trivia"
 Website = "https://twitch.tv/crimdahl"
 Creator = "Crimdahl"
-Version = "1.0.2-Beta"
+Version = "1.0.3-Beta"
 Description = "Trivia Minigame"
 # ---------------------------------------
 # Versions
