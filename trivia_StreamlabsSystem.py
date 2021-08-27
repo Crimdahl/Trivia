@@ -60,6 +60,7 @@ question_index_map = []
 current_question_index = -1  # Index in current_questions_list of the current question
 current_question_points = 0  # Current question points, used when random scaling is in effect
 current_game = ""  # Current game, as returned by an API call
+game_detection_override = False     # Prevents the 
 question_start_time = time.time()  # What time does the next question start?
 ready_for_next_question = True  # Boolean used when questions do not automatically start.
 readiness_notification_time = time.time()
@@ -286,29 +287,13 @@ def Execute(data):
             global current_game
             global master_questions_list
             global current_questions_list
+
             if subcommand == "stop":
                 active = False
                 update_current_question_file("")
                 log("Trivia Stop: Stopped with Command.", LoggingLevel.str_to_int.get("Info"))
                 post("Trivia stopped.")
-
-            elif subcommand == "count":
-                # Return a count of the number of questions available
-                if script_settings.enable_game_detection:
-                    # Also include the number of questions currently matching the game
-                    post("Total questions: " + str(
-                        len(master_questions_list)) + ". Questions from " + current_game + ": " + str(
-                        len(current_questions_list)) + ".")
-                else:
-                    post("Number of questions available: " + str(len(master_questions_list)) + ".")
-
-            elif subcommand == "answers":
-                if current_question_index == -1:
-                    post("No questions are currently loaded.")
-                else:
-                    post("Answers to the current question: " + ", ".join(
-                        current_questions_list[current_question_index].get_answers()))
-
+            
             elif subcommand == "save":
                 if save_trivia():
                     post("Trivia saved.")
@@ -332,6 +317,46 @@ def Execute(data):
                     log("Trivia Load: Subcommand used, but no questions exist that can be loaded.",
                         LoggingLevel.str_to_int.get("Info"))
                     post("Cannot load questions - no questions exist.")
+
+            elif subcommand == "game":
+                if data.GetParamCount() == 2:
+                    if script_settings.enable_game_detection:
+                        post("The currently active game is " + str(current_game) + ".")
+                    else:
+                        post("Game detection is currently disabled.")
+                elif data.GetParam(2) == "detect":
+                    global game_detection_override
+                    get_twitch_game()
+                    post("Game detected as " + str(current_game) + ".")
+                    game_detection_override = False
+                elif data.GetParam(2) == "set":
+                    global game_detection_override
+                    if data.GetParamCount() >= 4:
+                        current_game = ' '.join(data.Message.split(" ")[3:])
+                        load_trivia()
+                        post("Active game set to " + str(current_game) + ".")
+                        game_detection_override = True
+                    else:
+                        post("Command usage: !trivia game set <game name>")
+                else:
+                    post("Command usage: !trivia game (detect)")
+
+            elif subcommand == "count":
+                # Return a count of the number of questions available
+                if script_settings.enable_game_detection:
+                    # Also include the number of questions currently matching the game
+                    post("Total questions: " + str(
+                        len(master_questions_list)) + ". Questions from " + current_game + ": " + str(
+                        len(current_questions_list)) + ".")
+                else:
+                    post("Number of questions available: " + str(len(master_questions_list)) + ".")
+
+            elif subcommand == "answers":
+                if current_question_index == -1:
+                    post("No questions are currently loaded.")
+                else:
+                    post("Answers to the current question: " + ", ".join(
+                        current_questions_list[current_question_index].get_answers()))
 
             elif subcommand == "add":
                 if data.GetParamCount() == 2:
@@ -578,7 +603,10 @@ def Execute(data):
                 if len(current_questions_list) == 0:
                     log("!Trivia: Called to start new question, but no questions exist.",
                         LoggingLevel.str_to_int.get("Warn"))
-                    post("Could not load trivia. No questions exist.")
+                    if script_settings.enable_game_detection and len(master_questions_list) > 0:
+                        post("Could not load trivia. No questions exist for the current game.")
+                    else:
+                        post("Could not load trivia. No questions exist.")
                 elif current_question_index == -1:
                     if (not script_settings.automatically_run_next_question) and ready_for_next_question:
                         log("!Trivia: Called to start new question.", LoggingLevel.str_to_int.get("Debug"))
@@ -666,7 +694,11 @@ def check_for_match(data):
                 log("CheckForMatch: Match detected between answer " + answer + " and message "
                     + data.Message + ". User " + data.UserName + " added to the list of correct users.",
                     LoggingLevel.str_to_int.get("Debug"))
-
+                log("CheckForMatch: There are currently " + str(len(correct_users_dict)) + " winners out of "
+                    "a maximum of " + str(script_settings.number_of_winners) + ". The grace period is " 
+                    "currently " + str(script_settings.enable_grace_period) + "."
+                    + data.Message + ". User " + data.UserName + " added to the list of correct users.",
+                    LoggingLevel.str_to_int.get("Debug"))
                 # Check to see if the maximum number of winners has been met
                 if 0 < script_settings.number_of_winners <= len(correct_users_dict):
                     log("CheckForMatch: Number of winners achieved. Ending question.",
@@ -807,23 +839,10 @@ def next_question(question_index=-1):
         global ready_for_next_question
         global current_game
         global current_question_points
+        global game_detection_override
 
-        if script_settings.enable_game_detection:
-            # If the user is using game detection, check to see if
-            # their game has changed before loading the next question
-            if script_settings.twitch_channel_name == "":
-                log("NextQuestion: Game Detection has been enabled without being supplied a Twitch Username.",
-                    LoggingLevel.str_to_int.get("Fatal"))
-                raise AttributeError("Game Detection has been enabled without being supplied a Twitch Username.")
-            previous_game = current_game
-            current_game = json.loads(
-                Parent.GetRequest(twitch_api_source + script_settings.twitch_channel_name, {})).get("response")
-
-            # If their active game has changed, reload the current question list
-            if not previous_game == current_game:
-                log("NextQuestion: Game change detected. New game is " + str(
-                    current_game) + ". Loading new question set.", LoggingLevel.str_to_int.get("Info"))
-                load_trivia()
+        if script_settings.enable_game_detection and not game_detection_override:
+            get_twitch_game()
 
         # Log the previous question to prevent duplicates
         previous_question_index = current_question_index
@@ -901,11 +920,10 @@ def get_attribute(attribute, message):
     return result
 
 
-def parse_string(string, points=-1, winners=[]):
+def parse_string(string, winners=[]):
     # Apply question attributes to a string
     global current_question_index
-    if points == -1:
-        points = current_questions_list[current_question_index].get_points()
+    global current_question_points
 
     # Replace the $index parameter with the index of the current question
     string = string.replace("$index", str(current_question_index + 1))
@@ -989,6 +1007,13 @@ def save_trivia():
 def load_trivia():
     # Check if the length of the master questions list is 0. If it is, we need to load questions.
     global master_questions_list
+    global current_questions_list
+    global current_question_index
+
+    # If there is a question currently running, end that question.
+    if current_question_index != -1:
+        end_question()
+
     if len(master_questions_list) == 0:
         # If the question list is empty, we need to load trivia from file. First, check if the file exists.
         if os.path.exists(questions_file):
@@ -1099,7 +1124,7 @@ def update_current_question_file(line=None, duration_in_seconds=1):
     file = open(current_question_file, "w+")
     file.seek(0)
     if line:
-        file.write("Trivia: " + line)
+        file.write(line)
     file.truncate()
     file.close()
     next_question_file_update_time = time.time() + duration_in_seconds
@@ -1113,3 +1138,18 @@ def get_user_id(raw_data):
     except Exception:
         return ""
     return raw_data
+
+
+def get_twitch_game():
+    global current_game
+    if script_settings.twitch_channel_name == "":
+        log("NextQuestion: Game Detection has been enabled without being supplied a Twitch Username.", LoggingLevel.str_to_int.get("Fatal"))
+        raise AttributeError("Game Detection has been enabled without being supplied a Twitch Username.")
+    previous_game = current_game
+    current_game = json.loads(Parent.GetRequest(twitch_api_source + script_settings.twitch_channel_name, {})).get("response")
+
+    #If their active game has changed, reload the current question list
+    if not previous_game == current_game:
+        log("NextQuestion: Game change detected. New game is " + str(current_game) + ". Loading new question set.", LoggingLevel.str_to_int.get("Info"))
+        load_trivia()
+    
