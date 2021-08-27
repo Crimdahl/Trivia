@@ -18,7 +18,7 @@ from math import ceil
 ScriptName = "Trivia"
 Website = "https://twitch.tv/crimdahl"
 Creator = "Crimdahl"
-Version = "1.1.0-Beta"
+Version = "1.1.1-Beta"
 Description = "Trivia Minigame"
 # ---------------------------------------
 # Versions
@@ -42,6 +42,14 @@ Description = "Trivia Minigame"
             Removed unused debug code.
             Significant changes to setting parameters.
             More PEP-8 compliance changes.
+1.1.1-Beta   Added multiple new game detection-related commands.
+            - "!trivia game" displays the game currently detected by game detection, or an error if game detection is off.
+            - "!trivia game detect" manually runs the game detection code, useful for instances when the bot might be detecting the incorrect game.
+            - "!trivia game set <game name>" manually sets your detected game, in case you want to run trivia from a game other than the one you are currently playing. Running this command disables the script from automatically changing your detected game when you change what game you're playing on Twitch. This can be re-enabled by running the "!trivia game detect" command.
+            Removed unused points code in parse_string.
+            Split the Twitch API call to get the streamer's game into its own function, get_twitch_game.
+            The load_trivia function now ends any current question when called. This prevents the current_question_index from persisting after changing the set of questions being used.
+            Reordered a few of the subcommands.
 """
 # ---------------------------------------
 # Global Variables
